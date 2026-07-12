@@ -117,10 +117,11 @@ const Sidebar = () => {
     }));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowLogoutConfirm(false);
+    await logout();
     showToast.success('Logged out successfully');
-    navigate('/dashboard');
+    navigate('/login');
   };
 
   const sidebarVariants = {
@@ -128,7 +129,7 @@ const Sidebar = () => {
     collapsed: { width: 80 }
   };
 
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
 
   // Filter Menu Items based on role
   const filteredMenuItems = useMemo(() => {

@@ -124,11 +124,12 @@ const UsersPage = () => {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const handleApproveUser = async (id, e) => {
+  const handleApproveUser = async (user, e) => {
     e?.stopPropagation();
     try {
-      await userService.update(id, { status: 'Active' });
-      await activityService.create('Approve User', `Approved registration request for user ID ${id}`, currentUser.name);
+      const targetId = user.id || user._id;
+      await userService.update(targetId, { status: 'Active' });
+      await activityService.create('Approve User', `Approved registration request for user ID ${targetId}`, currentUser.name);
       showToast.success('User account approved and activated!');
       fetchData();
     } catch {
@@ -264,14 +265,14 @@ const UsersPage = () => {
       cell: (row) => (
         <div className="flex gap-2 items-center">
           {isSuperAdmin && row.status === 'Pending' && (
-            <Button variant="info" size="sm" className="px-2 py-1 font-bold text-[10px]" onClick={(e) => handleApproveUser(row.id, e)}>
+            <Button variant="info" size="sm" className="px-2 py-1 font-bold text-[10px]" onClick={(e) => handleApproveUser(row, e)}>
               Approve
             </Button>
           )}
           <Button variant="outline" size="sm" className="px-2" onClick={(e) => handleEditClick(row, e)}>
             <Edit size={13} />
           </Button>
-          <Button variant="outline" size="sm" className="px-2 text-danger border-danger/25 hover:bg-danger/5" onClick={(e) => handleDeleteUser(row.id, e)}>
+          <Button variant="outline" size="sm" className="px-2 text-danger border-danger/25 hover:bg-danger/5" onClick={(e) => handleDeleteUser(row.id || row._id, e)}>
             <Trash2 size={13} />
           </Button>
         </div>

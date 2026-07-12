@@ -41,7 +41,7 @@ router.post("/login", (async (req, res, next) => {
         }
         // Generate JWT token
         const token = jsonwebtoken_1.default.sign({
-            id: user._id.toString(),
+            id: user.id || user._id.toString(),
             email: user.email,
             name: user.name,
             roles: user.roles,
@@ -51,7 +51,7 @@ router.post("/login", (async (req, res, next) => {
             success: true,
             token,
             user: {
-                id: user._id.toString(),
+                id: user.id || user._id.toString(),
                 email: user.email,
                 name: user.name,
                 role: user.role || (user.roles && user.roles[0]) || "Fleet Manager",
@@ -85,8 +85,12 @@ router.post("/register", (async (req, res, next) => {
         const password_hash = bcryptjs_1.default.hashSync(password, 10);
         // Create a new distinct organization for the newly registered Admin
         const orgId = new mongoose_1.default.Types.ObjectId();
+        // Generate globally unique sequential ID (Uxxx)
+        const count = await model_1.UserModel.countDocuments();
+        const nextId = `U${String(count + 1).padStart(3, "0")}`;
         // Create user in DB (default to Admin role, Pending approval status)
         const newUser = (await new model_1.UserModel({
+            id: nextId,
             email,
             password_hash,
             name,
@@ -99,7 +103,7 @@ router.post("/register", (async (req, res, next) => {
         }).save());
         // Generate JWT token (though login won't succeed until approved, we can still return it for registration completion API consistency)
         const token = jsonwebtoken_1.default.sign({
-            id: newUser._id.toString(),
+            id: newUser.id || newUser._id.toString(),
             email: newUser.email,
             name: newUser.name,
             roles: newUser.roles,
@@ -109,7 +113,7 @@ router.post("/register", (async (req, res, next) => {
             success: true,
             token,
             user: {
-                id: newUser._id.toString(),
+                id: newUser.id || newUser._id.toString(),
                 email: newUser.email,
                 name: newUser.name,
                 role: "Admin",

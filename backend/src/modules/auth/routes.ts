@@ -43,7 +43,7 @@ router.post("/login", (async (req: Request, res: Response, next: NextFunction) =
     // Generate JWT token
     const token = jwt.sign(
       {
-        id: user._id.toString(),
+        id: user.id || user._id.toString(),
         email: user.email,
         name: user.name,
         roles: user.roles,
@@ -57,7 +57,7 @@ router.post("/login", (async (req: Request, res: Response, next: NextFunction) =
       success: true,
       token,
       user: {
-        id: user._id.toString(),
+        id: user.id || user._id.toString(),
         email: user.email,
         name: user.name,
         role: user.role || (user.roles && user.roles[0]) || "Fleet Manager",
@@ -96,8 +96,13 @@ router.post("/register", (async (req: Request, res: Response, next: NextFunction
     // Create a new distinct organization for the newly registered Admin
     const orgId = new mongoose.Types.ObjectId();
 
+    // Generate globally unique sequential ID (Uxxx)
+    const count = await UserModel.countDocuments();
+    const nextId = `U${String(count + 1).padStart(3, "0")}`;
+
     // Create user in DB (default to Admin role, Pending approval status)
     const newUser = (await new UserModel({
+      id: nextId,
       email,
       password_hash,
       name,
@@ -112,7 +117,7 @@ router.post("/register", (async (req: Request, res: Response, next: NextFunction
     // Generate JWT token (though login won't succeed until approved, we can still return it for registration completion API consistency)
     const token = jwt.sign(
       {
-        id: newUser._id.toString(),
+        id: newUser.id || newUser._id.toString(),
         email: newUser.email,
         name: newUser.name,
         roles: newUser.roles,
@@ -126,7 +131,7 @@ router.post("/register", (async (req: Request, res: Response, next: NextFunction
       success: true,
       token,
       user: {
-        id: newUser._id.toString(),
+        id: newUser.id || newUser._id.toString(),
         email: newUser.email,
         name: newUser.name,
         role: "Admin",
