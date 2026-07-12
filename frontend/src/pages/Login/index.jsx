@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
 const Login = () => {
@@ -107,6 +107,13 @@ const Login = () => {
             </button>
           </div>
         </form>
+
+        <div className="text-center text-xs text-slate-400 mt-4">
+          Don't have an account?{' '}
+          <Link to="/register" className="text-blue-400 hover:underline font-semibold">
+            Sign Up
+          </Link>
+        </div>
 
         {/* Credentials Info Block */}
         <div className="mt-6 p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-1">

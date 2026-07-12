@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import { env } from "../../config/env";
 import { UserModel } from "../users/model";
 
@@ -51,6 +52,66 @@ router.post("/login", (async (req: Request, res: Response, next: NextFunction) =
         name: user.name,
         roles: user.roles,
         organization_id: user.organization_id.toString()
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}) as any);
+
+router.post("/register", (async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password, name, role } = req.body;
+
+    if (!email || !password || !name) {
+      res.status(400).json({ error: "Name, email, and password are required." });
+      return;
+    }
+
+    // Check if user already exists
+    const existingUser = await UserModel.findOne({ email });
+    if (existingUser) {
+      res.status(400).json({ error: "User already registered with this email." });
+      return;
+    }
+
+    // Hash password
+    const password_hash = bcrypt.hashSync(password, 10);
+
+    // Default mock organization ID
+    const orgId = new mongoose.Types.ObjectId("60c72b2f9b1d8b3a7c8c8c8c");
+
+    // Create user in DB
+    const newUser = (await new UserModel({
+      email,
+      password_hash,
+      name,
+      roles: role ? [role] : ["Fleet Manager"],
+      organization_id: orgId
+    }).save()) as any;
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        id: newUser._id.toString(),
+        email: newUser.email,
+        name: newUser.name,
+        roles: newUser.roles,
+        organization_id: newUser.organization_id.toString(),
+      },
+      env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.status(201).json({
+      success: true,
+      token,
+      user: {
+        id: newUser._id.toString(),
+        email: newUser.email,
+        name: newUser.name,
+        roles: newUser.roles,
+        organization_id: newUser.organization_id.toString()
       }
     });
   } catch (error) {
