@@ -19,6 +19,9 @@ const VehicleSchema = new Schema(
     lastServiceDate: { type: String },
     carrierCap: { type: String },
     organization_id: { type: Schema.Types.ObjectId, required: true },
+    isArchived: { type: Boolean, default: false },
+    assignedDriverId: { type: String, default: null },
+    assignedTripId: { type: String, default: null },
     
     // Denormalized metrics for operational efficiency
     total_fuel_cost: { type: Number, default: 0 },
