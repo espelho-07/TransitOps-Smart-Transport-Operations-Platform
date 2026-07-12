@@ -250,20 +250,43 @@ const Dashboard = () => {
       }
     });
   };
-
-  // Driver interactive updates
-  const handleDriverFuelLogSubmit = (e) => {
+  
+  const handleDriverFuelLogSubmit = async (e) => {
     e.preventDefault();
     if (!fuelLiters || !fuelCost) {
       showToast.error('Please input liters and cost parameters');
       return;
     }
-    showToast.success(`Refuel entry registered! Logged ${fuelLiters}L for INR ${fuelCost}`);
-    setFuelLiters('');
-    setFuelCost('');
-    setIsFuelModalOpen(false);
-  };
 
+    const matchingDriver = drivers.find(d => d.email === currentUser.email);
+    const driverId = matchingDriver ? matchingDriver.id : null;
+    const vehicleId = driverTrip?.vehicleId || driverVehicle?.id;
+
+    if (!vehicleId) {
+      showToast.error('No active vehicle assignment found for logging fuel.');
+      return;
+    }
+
+    try {
+      await fuelService.create({
+        vehicleId,
+        driverId,
+        quantity: Number(fuelLiters),
+        cost: Number(fuelCost),
+        odometer: driverVehicle?.odometer || 100000,
+        stationName: 'Driver Terminal Refuel',
+        date: new Date().toISOString().split('T')[0]
+      });
+
+      showToast.success(`Refuel entry registered! Logged ${fuelLiters}L for INR ${fuelCost}`);
+      setFuelLiters('');
+      setFuelCost('');
+      setIsFuelModalOpen(false);
+      fetchOperationalData(true);
+    } catch (err) {
+      showToast.error(err.response?.data?.error || 'Failed to submit fuel log');
+    }
+  };
   const handleDriverIssueReportSubmit = (e) => {
     e.preventDefault();
     if (!reportedIssueDesc.trim()) {
