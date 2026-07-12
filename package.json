@@ -1,10 +1,27 @@
 {
-  "name": "transitops-root",
+  "name": "transitops-smart-transport-operations-platform",
   "private": true,
   "version": "1.0.0",
+  "description": "Smart Transport Operations Platform",
+  "main": "init-mongo.js",
   "scripts": {
     "dev": "npm run dev --prefix frontend",
     "build": "npm run build --prefix frontend",
-    "preview": "npm run preview --prefix frontend"
+    "preview": "npm run preview --prefix frontend",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/espelho-07/TransitOps-Smart-Transport-Operations-Platform.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/espelho-07/TransitOps-Smart-Transport-Operations-Platform/issues"
+  },
+  "homepage": "https://github.com/espelho-07/TransitOps-Smart-Transport-Operations-Platform#readme",
+  "dependencies": {
+    "mongodb": "^7.5.0"
   }
 }
