@@ -206,7 +206,12 @@ const Topbar = () => {
             <div className="border-t border-border mt-1" />
 
             <button
-              onClick={() => showToast.info('Sign out successful')}
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                navigate('/login');
+                showToast.success('Sign out successful');
+              }}
               className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-danger hover:bg-danger/10 transition-colors text-left"
             >
               <LogOut size={14} />

@@ -14,8 +14,13 @@ import Expenses from '../pages/Expenses';
 import Reports from '../pages/Reports';
 import Settings from '../pages/Settings';
 import Profile from '../pages/Profile';
+import Login from '../pages/Login';
 
 export const router = createBrowserRouter([
+  {
+    path: '/login',
+    element: <Login />
+  },
   {
     path: '/',
     element: <DashboardLayout />,

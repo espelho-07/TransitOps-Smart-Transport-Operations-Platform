@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import Footer from './Footer';
@@ -11,6 +11,11 @@ import { useUI } from '../context/UIContext';
 const DashboardLayout = () => {
   const location = useLocation();
   const { setIsMobileDrawerOpen } = useUI();
+
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
 
   // Close mobile drawer whenever route changes
   useEffect(() => {

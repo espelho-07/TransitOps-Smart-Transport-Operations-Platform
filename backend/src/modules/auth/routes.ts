@@ -16,7 +16,7 @@ router.post("/login", (async (req: Request, res: Response, next: NextFunction) =
     }
 
     // Find user by email
-    const user = await UserModel.findOne({ email });
+    const user = (await UserModel.findOne({ email })) as any;
     if (!user) {
       res.status(401).json({ error: "Invalid credentials: User not found." });
       return;
