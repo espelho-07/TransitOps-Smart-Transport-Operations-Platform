@@ -28,12 +28,12 @@ async function seed() {
     await db.collection("expenses").deleteMany({});
 
     // Shared mock organization ID
-    const orgId = new ObjectId();
+    const orgId = new ObjectId("60c72b2f9b1d8b3a7c8c8c8c");
 
     // 1. SEED USER
     console.log("Seeding Users...");
     await db.collection("users").insertOne({
-      _id: new ObjectId(),
+      _id: new ObjectId("60c72b2f9b1d8b3a7c8c8c8d"),
       email: "manager@transitops.com",
       password_hash: "$2b$10$EpRkB1B0p37kQc1pMepZle3G2xYk/r8nJ9pQ/6x739a8U", // dummy hash
       name: "John Doe",

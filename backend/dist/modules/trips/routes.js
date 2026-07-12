@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.tripRouter = void 0;
+const express_1 = require("express");
+const auth_1 = require("../../middlewares/auth");
+const controller_1 = require("./controller");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticate);
+router.get("/", controller_1.TripController.getAll);
+router.get("/:id", controller_1.TripController.getById);
+router.post("/", controller_1.TripController.create);
+router.put("/:id", controller_1.TripController.update);
+router.delete("/:id", controller_1.TripController.delete);
+exports.tripRouter = router;
+exports.default = router;

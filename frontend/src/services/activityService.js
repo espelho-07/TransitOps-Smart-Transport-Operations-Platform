@@ -1,9 +1,5 @@
-import { activities } from '../data/db';
+import api from './api';
 
 export const activityService = {
-  getAll: () => {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve([...activities]), 200);
-    });
-  }
+  getAll: () => api.get('/activities').then((res) => res.data)
 };

@@ -1,9 +1,5 @@
-import { notifications } from '../data/db';
+import api from './api';
 
 export const notificationService = {
-  getAll: () => {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve([...notifications]), 200);
-    });
-  }
+  getAll: () => api.get('/notifications').then((res) => res.data)
 };
