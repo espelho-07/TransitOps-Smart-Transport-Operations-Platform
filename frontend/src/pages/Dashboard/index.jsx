@@ -212,6 +212,12 @@ const Dashboard = () => {
     return trips.find(t => t.driverId === matchingDriver.id && t.status !== 'Completed') || null;
   }, [currentUser, trips, drivers]);
 
+  useEffect(() => {
+    if (driverTrip) {
+      setDriverTripStatus(driverTrip.status);
+    }
+  }, [driverTrip]);
+
   // Actions
   const handleApproveExpense = (id) => {
     setConfirmDialog({
@@ -784,9 +790,15 @@ const Dashboard = () => {
                   {['Scheduled', 'Active', 'Paused', 'Completed'].map(state => (
                     <button
                       key={state}
-                      onClick={() => {
-                        setDriverTripStatus(state);
-                        showToast.success(`Trip status updated locally to: ${state}`);
+                      onClick={async () => {
+                        try {
+                          await tripService.update(driverTrip.id, { status: state });
+                          setDriverTripStatus(state);
+                          showToast.success(`Trip status updated to: ${state}`);
+                          fetchOperationalData(true);
+                        } catch {
+                          showToast.error('Failed to persist status change');
+                        }
                       }}
                       className={`px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
                         driverTripStatus === state
