@@ -163,8 +163,8 @@ const TripModal = ({ isOpen, onClose, tripId, onSave }) => {
       }
       onSave();
       onClose();
-    } catch {
-      showToast.error("Failed to save dispatch log");
+    } catch (err) {
+      showToast.error(err.response?.data?.error || "Failed to save dispatch log");
     } finally {
       setIsSaving(false);
     }
