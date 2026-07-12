@@ -116,7 +116,8 @@ const VehicleDetails = ({ vehicleId, onBack, onEdit }) => {
       setExpenses(vExpenses);
 
     } catch (err) {
-      showToast.error('Failed to load vehicle data profile');
+      console.error("Failed to load vehicle details:", err);
+      showToast.error(err.response?.data?.error || err.message || 'Failed to load vehicle data profile');
     } finally {
       setLoading(false);
     }
