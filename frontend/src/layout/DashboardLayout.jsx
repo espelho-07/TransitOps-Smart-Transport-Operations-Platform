@@ -31,6 +31,11 @@ const DashboardLayout = () => {
     // Admin has access to all routes
     if (role === 'Admin') return true;
 
+    if (role === 'Super Admin') {
+      const allowed = ['/dashboard', '/users', '/notifications', '/profile', '/access-denied'];
+      return allowed.some(p => cleanPath === p || cleanPath.startsWith('/users'));
+    }
+
     // Direct bypass for standard utility paths
     if (cleanPath === '/access-denied' || cleanPath === '/profile' || cleanPath === '/notifications' || cleanPath === '/help' || cleanPath === '/dashboard') {
       return true;

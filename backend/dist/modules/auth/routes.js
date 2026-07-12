@@ -24,6 +24,15 @@ router.post("/login", (async (req, res, next) => {
             res.status(401).json({ error: "Invalid credentials: User not found." });
             return;
         }
+        // Verify user status (Pending or Inactive block)
+        if (user.status === "Pending") {
+            res.status(401).json({ error: "Your account is pending approval by the Super Admin." });
+            return;
+        }
+        if (user.status === "Inactive") {
+            res.status(401).json({ error: "Your account is inactive." });
+            return;
+        }
         // Verify password hash
         const isPasswordValid = bcryptjs_1.default.compareSync(password, user.password_hash);
         if (!isPasswordValid) {
@@ -61,7 +70,7 @@ router.post("/login", (async (req, res, next) => {
 }));
 router.post("/register", (async (req, res, next) => {
     try {
-        const { email, password, name, role } = req.body;
+        const { email, password, name, company, phone } = req.body;
         if (!email || !password || !name) {
             res.status(400).json({ error: "Name, email, and password are required." });
             return;
@@ -74,17 +83,21 @@ router.post("/register", (async (req, res, next) => {
         }
         // Hash password
         const password_hash = bcryptjs_1.default.hashSync(password, 10);
-        // Default mock organization ID
-        const orgId = new mongoose_1.default.Types.ObjectId("60c72b2f9b1d8b3a7c8c8c8c");
-        // Create user in DB
+        // Create a new distinct organization for the newly registered Admin
+        const orgId = new mongoose_1.default.Types.ObjectId();
+        // Create user in DB (default to Admin role, Pending approval status)
         const newUser = (await new model_1.UserModel({
             email,
             password_hash,
             name,
-            roles: role ? [role] : ["Fleet Manager"],
+            role: "Admin",
+            roles: ["Admin"],
+            company: company || "TransitOps Logistics",
+            phone: phone || null,
+            status: "Pending",
             organization_id: orgId
         }).save());
-        // Generate JWT token
+        // Generate JWT token (though login won't succeed until approved, we can still return it for registration completion API consistency)
         const token = jsonwebtoken_1.default.sign({
             id: newUser._id.toString(),
             email: newUser.email,
@@ -99,7 +112,9 @@ router.post("/register", (async (req, res, next) => {
                 id: newUser._id.toString(),
                 email: newUser.email,
                 name: newUser.name,
-                roles: newUser.roles,
+                role: "Admin",
+                roles: ["Admin"],
+                status: "Pending",
                 organization_id: newUser.organization_id.toString()
             }
         });

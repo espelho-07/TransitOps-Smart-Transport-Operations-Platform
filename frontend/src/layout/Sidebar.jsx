@@ -165,6 +165,14 @@ const Sidebar = () => {
         return mappedItem;
       })
       .filter(item => {
+        if (role === 'Super Admin') {
+          return (
+            item.name === 'Dashboard' ||
+            item.name === 'User Management' ||
+            item.name === 'Notifications' ||
+            item.name === 'Profile'
+          );
+        }
         if (role === 'Admin') return true;
         if (role === 'Driver') {
           return (

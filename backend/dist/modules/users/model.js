@@ -10,7 +10,7 @@ const UserSchema = new mongoose_1.Schema({
     role: { type: String, default: null }, // single role alias
     roles: {
         type: [String],
-        enum: ["Admin", "Fleet Manager", "Dispatcher", "Driver", "Safety Officer", "Financial Analyst"],
+        enum: ["Super Admin", "Admin", "Fleet Manager", "Dispatcher", "Driver", "Safety Officer", "Financial Analyst"],
         required: true,
     },
     phone: { type: String, default: null },

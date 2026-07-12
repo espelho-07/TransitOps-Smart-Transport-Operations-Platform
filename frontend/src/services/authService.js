@@ -56,12 +56,12 @@ export const authService = {
   isAuthenticated: () => {
     return !!localStorage.getItem('token');
   },
-
   getPermissions: () => {
     const user = authService.getCurrentUser();
     if (!user) return [];
     const role = user.role || (user.roles && user.roles[0]) || '';
     switch (role) {
+      case 'Super Admin':
       case 'Admin':
         return ['all'];
       case 'Fleet Manager':

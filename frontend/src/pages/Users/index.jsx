@@ -26,8 +26,11 @@ import { showToast } from '../../components/ui/Toast';
 const UsersPage = () => {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'Admin';
+  const isSuperAdmin = currentUser?.role === 'Super Admin';
+  const hasAccess = isAdmin || isSuperAdmin;
 
   // State Management
+  const [createdUserData, setCreatedUserData] = useState(null);
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -121,6 +124,18 @@ const UsersPage = () => {
     return Object.keys(tempErrors).length === 0;
   };
 
+  const handleApproveUser = async (id, e) => {
+    e?.stopPropagation();
+    try {
+      await userService.update(id, { status: 'Active' });
+      await activityService.create('Approve User', `Approved registration request for user ID ${id}`, currentUser.name);
+      showToast.success('User account approved and activated!');
+      fetchData();
+    } catch {
+      showToast.error('Failed to approve user');
+    }
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
@@ -138,6 +153,13 @@ const UsersPage = () => {
         const newUser = await userService.create(formData);
         await activityService.create('Register User', `Created staff operator credentials for ${formData.name}`, currentUser.name);
         showToast.success('Registered new staff credentials!');
+        if (newUser && newUser.generatedPassword) {
+          setCreatedUserData({
+            name: newUser.name,
+            email: newUser.email,
+            password: newUser.generatedPassword
+          });
+        }
       }
 
       setIsModalOpen(false);
@@ -240,7 +262,12 @@ const UsersPage = () => {
       header: 'Actions',
       accessor: 'actions',
       cell: (row) => (
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {isSuperAdmin && row.status === 'Pending' && (
+            <Button variant="info" size="sm" className="px-2 py-1 font-bold text-[10px]" onClick={(e) => handleApproveUser(row.id, e)}>
+              Approve
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="px-2" onClick={(e) => handleEditClick(row, e)}>
             <Edit size={13} />
           </Button>
@@ -252,7 +279,7 @@ const UsersPage = () => {
     }
   ];
 
-  if (!isAdmin) {
+  if (!hasAccess) {
     return (
       <PageContainer>
         <div className="bg-card border border-border p-8 rounded-lg shadow-sm text-center select-none space-y-3">
@@ -504,6 +531,43 @@ const UsersPage = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Temporary Credentials display Modal */}
+      <Modal
+        isOpen={!!createdUserData}
+        onClose={() => setCreatedUserData(null)}
+        title="Account Credentials Generated"
+        size="sm"
+      >
+        <div className="space-y-4 text-left text-xs font-semibold text-text-secondary select-none">
+          <p className="text-text-main text-xs font-bold leading-relaxed">
+            The temporary access credentials have been generated. Please copy them now as they will not be shown again.
+          </p>
+          <div className="bg-hover/10 p-3.5 border border-border rounded-xl space-y-2.5">
+            <div>
+              <span className="block text-[9px] uppercase font-bold text-text-secondary">Username / Email</span>
+              <span className="text-text-main block font-black select-all mt-0.5">{createdUserData?.email}</span>
+            </div>
+            <div>
+              <span className="block text-[9px] uppercase font-bold text-text-secondary">Temporary Password</span>
+              <span className="text-text-main block font-black select-all mt-0.5">{createdUserData?.password}</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="info"
+              className="w-full font-bold py-2 text-xs"
+              onClick={() => {
+                navigator.clipboard.writeText(`Email: ${createdUserData?.email}\nPassword: ${createdUserData?.password}`);
+                showToast.success('Credentials copied to clipboard!');
+                setCreatedUserData(null);
+              }}
+            >
+              Copy Credentials & Close
+            </Button>
+          </div>
+        </div>
       </Modal>
     </PageContainer>
   );

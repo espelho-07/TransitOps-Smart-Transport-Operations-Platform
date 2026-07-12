@@ -96,10 +96,10 @@ const SignupPage = () => {
       // Pass a default role for demo accounts registered via signup
       await signup({
         ...formData,
-        role: 'Fleet Manager'
+        role: 'Admin'
       });
       setIsSuccess(true);
-      showToast.success('Account created successfully!');
+      showToast.success('Admin registration request submitted!');
     } catch (err) {
       setErrors({ email: err.message });
       showToast.error(err.message || 'Registration failed');
@@ -116,9 +116,9 @@ const SignupPage = () => {
             <CheckCircle2 size={36} />
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-black uppercase text-white tracking-tight">Account Created!</h2>
+            <h2 className="text-xl font-black uppercase text-white tracking-tight">Request Submitted!</h2>
             <p className="text-xs text-slate-400 font-semibold leading-relaxed">
-              Your TransitOps operator credentials have been registered in the database. Please sign in to verify your credentials.
+              Your Admin registration request has been submitted. It is currently pending approval by the Super Admin. You will be able to log in once your request is accepted.
             </p>
           </div>
           <button

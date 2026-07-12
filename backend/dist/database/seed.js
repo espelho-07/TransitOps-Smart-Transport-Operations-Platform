@@ -56,9 +56,21 @@ async function seedLargeDatabase() {
     await model_9.ActivityModel.deleteMany({});
     await model_10.ReportModel.deleteMany({});
     console.log("Database cleared.");
-    // 2. SEED ALL 5 DEFAULT ROLE-BASED USERS (password: "password" for all)
+    // 2. SEED ALL DEFAULT ROLE-BASED USERS (password: "password" for all)
     const PASSWORD_HASH = "$2b$10$YwThacezBVJ1m7A3AkyxXeA4ZOHPsCowkqPlYN5YczAuY8mQQ1o1G";
     const defaultUsers = [
+        {
+            id: "U000",
+            email: "superadmin@transitops.com",
+            password_hash: PASSWORD_HASH,
+            name: "Super Admin",
+            role: "Super Admin",
+            roles: ["Super Admin"],
+            company: "TransitOps Suite",
+            status: "Active",
+            avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80",
+            organization_id: orgId,
+        },
         {
             id: "U001",
             email: "admin@transitops.com",
@@ -120,9 +132,21 @@ async function seedLargeDatabase() {
             avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&h=150&q=80",
             organization_id: orgId,
         },
+        {
+            id: "U006",
+            email: "pendingadmin@transitops.com",
+            password_hash: PASSWORD_HASH,
+            name: "Arthur Pendragon",
+            role: "Admin",
+            roles: ["Admin"],
+            company: "Camelot Transports",
+            status: "Pending",
+            avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80",
+            organization_id: orgId,
+        },
     ];
     await model_1.UserModel.insertMany(defaultUsers);
-    console.log("All 5 default users seeded.");
+    console.log("All default users (including Super Admin and pending Admin request) seeded.");
     // 3. SEED VEHICLES (50 items)
     const vehiclesList = [];
     for (let i = 1; i <= 50; i++) {
