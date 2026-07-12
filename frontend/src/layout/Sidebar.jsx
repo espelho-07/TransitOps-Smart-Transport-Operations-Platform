@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -22,6 +22,8 @@ import { useUI } from '../context/UIContext';
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import Avatar from '../components/Avatar';
 import { showToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
+import { DriverAvatar } from '../components/ui/FallbackImage';
 
 const Sidebar = () => {
   const { isSidebarCollapsed, toggleSidebarCollapse, isMobileDrawerOpen, setIsMobileDrawerOpen } = useUI();
@@ -117,6 +119,55 @@ const Sidebar = () => {
     collapsed: { width: 80 }
   };
 
+  const { currentUser } = useAuth();
+
+  // Filter Menu Items based on role
+  const filteredMenuItems = useMemo(() => {
+    const role = currentUser?.role || 'Admin';
+    return menuItems
+      .map(item => {
+        if (item.children) {
+          // Hide Add/Dispatch links for non-managers
+          let filteredChildren = item.children;
+          if (role === 'Safety Officer' || role === 'Financial Analyst') {
+            filteredChildren = item.children.filter(
+              child => !child.path.endsWith('/add') && !child.path.endsWith('/dispatch')
+            );
+          }
+          return { ...item, children: filteredChildren };
+        }
+        return item;
+      })
+      .filter(item => {
+        if (role === 'Admin') return true;
+        if (role === 'Driver') {
+          return item.name === 'Dashboard' || item.name === 'Profile';
+        }
+        if (role === 'Safety Officer') {
+          return (
+            item.name === 'Dashboard' ||
+            item.name === 'Vehicles' ||
+            item.name === 'Drivers' ||
+            item.name === 'Reports' ||
+            item.name === 'Profile'
+          );
+        }
+        if (role === 'Financial Analyst') {
+          return (
+            item.name === 'Dashboard' ||
+            item.name === 'Fuel Logs' ||
+            item.name === 'Expenses' ||
+            item.name === 'Reports' ||
+            item.name === 'Profile'
+          );
+        }
+        if (role === 'Fleet Manager') {
+          return item.name !== 'Settings';
+        }
+        return true;
+      });
+  }, [currentUser]);
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-sidebar border-r border-border select-none">
       {/* Brand Header */}
@@ -135,7 +186,7 @@ const Sidebar = () => {
 
       {/* Navigation List */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
-        {menuItems.map((item) => {
+        {filteredMenuItems.map((item) => {
           const hasChildren = !!item.children;
           const isSubmenuOpen = item.submenuKey ? openSubmenu[item.submenuKey] : false;
           
@@ -240,11 +291,11 @@ const Sidebar = () => {
       <div className="p-3 border-t border-border bg-hover/10 space-y-2">
         {/* User Card */}
         <div className={`flex items-center gap-3 p-2 rounded-lg ${isSidebarCollapsed ? 'justify-center' : ''}`}>
-          <Avatar initials="AJ" status="active" size={isSidebarCollapsed ? 'sm' : 'md'} />
+          <DriverAvatar name={currentUser.name} avatarUrl={currentUser.avatar} size={isSidebarCollapsed ? 32 : 40} />
           {!isSidebarCollapsed && (
-            <div className="min-w-0 flex-1 select-none animate-fadeIn">
-              <p className="text-xs font-bold text-text-main truncate">Alex Johnson</p>
-              <p className="text-[10px] text-text-secondary font-medium truncate">alex.johnson@transitops.com</p>
+            <div className="min-w-0 flex-1 select-none animate-fadeIn text-left">
+              <p className="text-xs font-bold text-text-main truncate">{currentUser.name}</p>
+              <p className="text-[10px] text-text-secondary font-medium truncate">{currentUser.email}</p>
             </div>
           )}
         </div>

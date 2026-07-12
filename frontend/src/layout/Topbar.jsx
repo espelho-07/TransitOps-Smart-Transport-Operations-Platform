@@ -8,10 +8,13 @@ import Avatar from '../components/Avatar';
 import NotificationItem from '../components/NotificationItem';
 import CommandPalette from '../components/CommandPalette';
 import { showToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
+import { DriverAvatar } from '../components/ui/FallbackImage';
 
 const Topbar = () => {
   const { isDark, toggleTheme } = useTheme();
   const { toggleMobileDrawer } = useUI();
+  const { currentUser, switchRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -100,6 +103,28 @@ const Topbar = () => {
 
       {/* Action panel */}
       <div className="flex items-center gap-3">
+        {/* Global Role Switcher */}
+        <div className="flex items-center gap-1.5 bg-hover border border-border rounded-lg p-1 mr-1">
+          <span className="hidden md:inline text-[9.5px] text-text-secondary uppercase tracking-widest font-black px-1.5 select-none">
+            Workspace:
+          </span>
+          <select
+            value={currentUser.role}
+            onChange={(e) => {
+              switchRole(e.target.value);
+              showToast.success(`Switched to ${e.target.value} Workspace`);
+              navigate('/dashboard');
+            }}
+            className="bg-card border-none text-[10px] font-bold text-info focus:outline-none focus:ring-0 p-0 pr-6 pl-1.5 cursor-pointer uppercase tracking-wider h-6 rounded border-border"
+          >
+            <option value="Admin">Admin</option>
+            <option value="Fleet Manager">Fleet Manager</option>
+            <option value="Driver">Driver</option>
+            <option value="Safety Officer">Safety Officer</option>
+            <option value="Financial Analyst">Analyst</option>
+          </select>
+        </div>
+
         {/* Theme switch button */}
         <button
           onClick={toggleTheme}
@@ -167,18 +192,18 @@ const Topbar = () => {
               className="flex items-center gap-2 focus:outline-none hover:opacity-85 transition-opacity"
               aria-label="User Account Settings Menu"
             >
-              <Avatar initials="AJ" status="active" size="sm" />
+              <DriverAvatar name={currentUser.name} avatarUrl={currentUser.avatar} size={32} />
               <div className="hidden lg:block text-left select-none">
-                <p className="text-xs font-bold text-text-main leading-tight">Alex Johnson</p>
-                <p className="text-[10px] text-text-secondary font-semibold uppercase tracking-wider mt-0.5">Fleet Manager</p>
+                <p className="text-xs font-bold text-text-main leading-tight">{currentUser.name}</p>
+                <p className="text-[10px] text-text-secondary font-semibold uppercase tracking-wider mt-0.5">{currentUser.role}</p>
               </div>
             </button>
           }
         >
           <div className="py-1">
-            <div className="px-4 py-2 border-b border-border">
-              <p className="text-xs font-bold text-text-main">Alex Johnson</p>
-              <p className="text-[10px] text-text-secondary font-medium">alex.johnson@transitops.com</p>
+            <div className="px-4 py-2 border-b border-border text-left">
+              <p className="text-xs font-bold text-text-main">{currentUser.name}</p>
+              <p className="text-[10px] text-text-secondary font-medium">{currentUser.email}</p>
             </div>
             
             <button
