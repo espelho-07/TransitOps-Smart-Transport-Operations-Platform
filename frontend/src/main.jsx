@@ -4,6 +4,9 @@ import App from './App.jsx'
 
 // Diagnostic error interceptor for white screens
 window.addEventListener('error', (event) => {
+  if (event.message && (event.message.includes('concurrent rendering') || event.message.includes('recover'))) {
+    return;
+  }
   const root = document.getElementById('root');
   if (root) {
     root.innerHTML = `

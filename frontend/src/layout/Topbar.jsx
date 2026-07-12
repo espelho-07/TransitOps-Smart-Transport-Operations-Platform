@@ -1,32 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Sun, Moon, Bell, Search, User, Settings, LogOut, Command } from 'lucide-react';
+import { Menu, Sun, Moon, Bell, Search, User, Settings, LogOut, Command, CheckSquare, Trash2, X, AlertTriangle, Info } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useUI } from '../context/UIContext';
 import Dropdown from '../components/Dropdown';
-import Avatar from '../components/Avatar';
-import NotificationItem from '../components/NotificationItem';
+import Drawer from '../components/ui/Drawer';
 import CommandPalette from '../components/CommandPalette';
 import { showToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { DriverAvatar } from '../components/ui/FallbackImage';
+import { notificationService } from '../services/notificationService';
 
 const Topbar = () => {
   const { isDark, toggleTheme } = useTheme();
   const { toggleMobileDrawer } = useUI();
-  const { currentUser, switchRole } = useAuth();
-  const location = useLocation();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Vehicle V003 scheduled for service', time: '10m ago', unread: true, type: 'maintenance' },
-    { id: 2, title: 'Trip TRIP-2026-002 has started', time: '1h ago', unread: true, type: 'trip' },
-    { id: 3, title: 'Fuel log added for V004', time: '3h ago', unread: false, type: 'fuel' },
-    { id: 4, title: 'Driver Alex Pierce license expires soon', time: '1d ago', unread: true, type: 'license' },
-    { id: 5, title: 'Driver Sarah Jenkins assigned to V002', time: '2d ago', unread: false, type: 'vehicle' }
-  ]);
+  const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
 
   // Update clock every second
   useEffect(() => {
@@ -46,12 +41,110 @@ const Topbar = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    setLoadingNotifs(true);
+    try {
+      const data = await notificationService.getAll();
+      setNotifications(data);
+    } catch {
+      console.error('Failed to load notifications');
+    } finally {
+      setLoadingNotifs(false);
+    }
+  };
 
-  const handleMarkAllRead = (e) => {
-    e.stopPropagation();
-    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
-    showToast.success('All notifications marked as read');
+  useEffect(() => {
+    fetchNotifications();
+  }, [isNotifDrawerOpen]);
+
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => n.unread).length;
+  }, [notifications]);
+
+  // Group notifications
+  const groupedNotifications = useMemo(() => {
+    const groups = {
+      unread: [],
+      today: [],
+      yesterday: [],
+      earlier: []
+    };
+
+    notifications.forEach(n => {
+      if (n.unread) {
+        groups.unread.push(n);
+      } else {
+        const timeStr = n.time || '';
+        if (timeStr.includes('m ago') || timeStr.includes('h ago') || timeStr.includes('minutes') || timeStr.includes('hours')) {
+          groups.today.push(n);
+        } else if (timeStr.includes('1d ago') || timeStr.includes('1 day')) {
+          groups.yesterday.push(n);
+        } else {
+          groups.earlier.push(n);
+        }
+      }
+    });
+
+    return groups;
+  }, [notifications]);
+
+  const handleMarkRead = async (id, e) => {
+    e?.stopPropagation();
+    try {
+      await notificationService.markAsRead(id);
+      fetchNotifications();
+    } catch {
+      showToast.error('Failed to update status');
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      showToast.success('All notifications marked as read');
+      fetchNotifications();
+    } catch {
+      showToast.error('Failed to mark all as read');
+    }
+  };
+
+  const handleClearRead = async () => {
+    try {
+      const readNotifs = notifications.filter(n => !n.unread);
+      await Promise.all(readNotifs.map(n => notificationService.archive(n.id)));
+      showToast.success('Cleared read notifications');
+      fetchNotifications();
+    } catch {
+      showToast.error('Failed to clear read alerts');
+    }
+  };
+
+  const handleNotificationClick = async (n) => {
+    if (n.unread) {
+      await notificationService.markAsRead(n.id);
+    }
+    setIsNotifDrawerOpen(false);
+
+    // Route dynamically based on type
+    if (n.type === 'vehicle') {
+      navigate('/vehicles');
+    } else if (n.type === 'trip') {
+      navigate('/trips');
+    } else if (n.type === 'maintenance') {
+      navigate('/maintenance');
+    } else if (n.type === 'expense') {
+      navigate('/expenses');
+    } else {
+      navigate('/dashboard');
+    }
+    showToast.info(`Inspecting alert details`);
+  };
+
+  const handleLogoutClick = async () => {
+    await logout();
+    navigate('/login');
+    showToast.success('Logged out successfully');
   };
 
   const formattedDate = currentTime.toLocaleDateString(undefined, {
@@ -103,28 +196,7 @@ const Topbar = () => {
 
       {/* Action panel */}
       <div className="flex items-center gap-3">
-        {/* Global Role Switcher */}
-        <div className="flex items-center gap-1.5 bg-hover border border-border rounded-lg p-1 mr-1">
-          <span className="hidden md:inline text-[9.5px] text-text-secondary uppercase tracking-widest font-black px-1.5 select-none">
-            Workspace:
-          </span>
-          <select
-            value={currentUser.role}
-            onChange={(e) => {
-              switchRole(e.target.value);
-              showToast.success(`Switched to ${e.target.value} Workspace`);
-              navigate('/dashboard');
-            }}
-            className="bg-card border-none text-[10px] font-bold text-info focus:outline-none focus:ring-0 p-0 pr-6 pl-1.5 cursor-pointer uppercase tracking-wider h-6 rounded border-border"
-          >
-            <option value="Admin">Admin</option>
-            <option value="Fleet Manager">Fleet Manager</option>
-            <option value="Driver">Driver</option>
-            <option value="Safety Officer">Safety Officer</option>
-            <option value="Financial Analyst">Analyst</option>
-          </select>
-        </div>
-
+        
         {/* Theme switch button */}
         <button
           onClick={toggleTheme}
@@ -135,52 +207,19 @@ const Topbar = () => {
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
-        {/* Alerts bell dropdown */}
-        <Dropdown
-          align="right"
-          trigger={
-            <button
-              className="p-2 rounded-lg text-text-secondary hover:text-text-main hover:bg-hover transition-colors focus:outline-none relative"
-              aria-label={`View Notifications. You have ${unreadCount} unread items.`}
-            >
-              <Bell size={18} />
-              {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 h-4 w-4 bg-danger text-[9px] font-bold text-white flex items-center justify-center rounded-full ring-2 ring-card" style={{ fontSize: '8px' }}>
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-          }
+        {/* Alerts bell button */}
+        <button
+          onClick={() => setIsNotifDrawerOpen(true)}
+          className="p-2 rounded-lg text-text-secondary hover:text-text-main hover:bg-hover transition-colors focus:outline-none relative"
+          aria-label={`View Notifications. You have ${unreadCount} unread items.`}
         >
-          <div className="w-80 max-w-xs">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-              <span className="text-xs font-bold text-text-main">Notifications</span>
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  className="text-[10px] text-info hover:underline font-bold"
-                >
-                  Mark all read
-                </button>
-              )}
-            </div>
-            <div className="divide-y divide-border max-h-72 overflow-y-auto">
-              {notifications.map((n) => (
-                <NotificationItem
-                  key={n.id}
-                  title={n.title}
-                  time={n.time}
-                  unread={n.unread}
-                  type={n.type}
-                  onClick={() => {
-                    setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, unread: false } : item));
-                    showToast.info(`Notification: ${n.title}`);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </Dropdown>
+          <Bell size={18} />
+          {unreadCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 h-4 w-4 bg-danger text-[9px] font-bold text-white flex items-center justify-center rounded-full ring-2 ring-card" style={{ fontSize: '8px' }}>
+              {unreadCount}
+            </span>
+          )}
+        </button>
 
         <div className="h-6 w-px bg-border" />
 
@@ -192,18 +231,18 @@ const Topbar = () => {
               className="flex items-center gap-2 focus:outline-none hover:opacity-85 transition-opacity"
               aria-label="User Account Settings Menu"
             >
-              <DriverAvatar name={currentUser.name} avatarUrl={currentUser.avatar} size={32} />
+              <DriverAvatar name={currentUser?.name} avatarUrl={currentUser?.avatar} size={32} />
               <div className="hidden lg:block text-left select-none">
-                <p className="text-xs font-bold text-text-main leading-tight">{currentUser.name}</p>
-                <p className="text-[10px] text-text-secondary font-semibold uppercase tracking-wider mt-0.5">{currentUser.role}</p>
+                <p className="text-xs font-bold text-text-main leading-tight">{currentUser?.name}</p>
+                <p className="text-[10px] text-text-secondary font-semibold uppercase tracking-wider mt-0.5">{currentUser?.role}</p>
               </div>
             </button>
           }
         >
           <div className="py-1">
             <div className="px-4 py-2 border-b border-border text-left">
-              <p className="text-xs font-bold text-text-main">{currentUser.name}</p>
-              <p className="text-[10px] text-text-secondary font-medium">{currentUser.email}</p>
+              <p className="text-xs font-bold text-text-main">{currentUser?.name}</p>
+              <p className="text-[10px] text-text-secondary font-medium">{currentUser?.email}</p>
             </div>
             
             <button
@@ -217,26 +256,23 @@ const Topbar = () => {
               <span>Operator Profile</span>
             </button>
 
-            <button
-              onClick={() => {
-                navigate('/settings');
-                showToast.info('Opening System Settings');
-              }}
-              className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-text-secondary hover:text-text-main hover:bg-hover transition-colors text-left"
-            >
-              <Settings size={14} />
-              <span>System Settings</span>
-            </button>
+            {currentUser?.role === 'Admin' && (
+              <button
+                onClick={() => {
+                  navigate('/settings');
+                  showToast.info('Opening System Settings');
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-text-secondary hover:text-text-main hover:bg-hover transition-colors text-left"
+              >
+                <Settings size={14} />
+                <span>System Settings</span>
+              </button>
+            )}
 
             <div className="border-t border-border mt-1" />
 
             <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                navigate('/login');
-                showToast.success('Sign out successful');
-              }}
+              onClick={handleLogoutClick}
               className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-danger hover:bg-danger/10 transition-colors text-left"
             >
               <LogOut size={14} />
@@ -248,6 +284,151 @@ const Topbar = () => {
 
       {/* Command Palette Keyboard Shortcut Modal */}
       <CommandPalette isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+
+      {/* Notifications Right Side Slide-over Panel */}
+      <Drawer
+        isOpen={isNotifDrawerOpen}
+        onClose={() => setIsNotifDrawerOpen(false)}
+        title="Notification Center"
+        className="w-full sm:w-[380px]"
+      >
+        <div className="space-y-5 text-left text-xs font-semibold text-text-secondary h-full flex flex-col justify-between">
+          
+          {/* Header Action Controls */}
+          <div className="flex justify-between items-center gap-2 border-b border-border/60 pb-3">
+            <span className="text-[10px] font-black text-text-secondary uppercase">Unread Count: {unreadCount}</span>
+            <div className="flex gap-2">
+              <button
+                onClick={handleMarkAllRead}
+                disabled={unreadCount === 0}
+                className="text-[10px] font-bold text-info hover:underline disabled:opacity-50 disabled:no-underline"
+              >
+                Mark all read
+              </button>
+              <span className="text-border">|</span>
+              <button
+                onClick={handleClearRead}
+                className="text-[10px] font-bold text-text-secondary hover:text-text-main hover:underline"
+              >
+                Clear read
+              </button>
+            </div>
+          </div>
+
+          {/* Grouped Notifications List */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+            {loadingNotifs ? (
+              <div className="py-20 flex flex-col items-center justify-center space-y-2">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-info" />
+                <span className="text-[10px] text-text-secondary uppercase">Loading alerts...</span>
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="py-20 text-center text-text-secondary text-[11px]">
+                No notifications in your inbox.
+              </div>
+            ) : (
+              <>
+                {/* 1. Unread */}
+                {groupedNotifications.unread.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="block text-[9px] uppercase font-bold text-info">Unread Alerts</span>
+                    <div className="space-y-1.5">
+                      {groupedNotifications.unread.map(n => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className="p-3 border border-info/20 rounded-xl bg-info/5 hover:bg-info/10 transition-colors cursor-pointer flex gap-3 relative"
+                        >
+                          <div className="h-2 w-2 bg-info rounded-full absolute top-3 right-3" />
+                          <div className="flex-shrink-0 pt-0.5">
+                            <AlertTriangle size={14} className="text-info" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-text-main">{n.title}</p>
+                            <p className="text-[10px] text-text-secondary mt-1">{n.time} | Category: {n.type}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Today */}
+                {groupedNotifications.today.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="block text-[9px] uppercase font-bold">Today</span>
+                    <div className="space-y-1.5">
+                      {groupedNotifications.today.map(n => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className="p-3 border border-border/50 rounded-xl bg-card hover:bg-hover/30 transition-colors cursor-pointer flex gap-3"
+                        >
+                          <div className="flex-shrink-0 pt-0.5">
+                            <Info size={14} className="text-text-secondary" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-text-main">{n.title}</p>
+                            <p className="text-[10px] text-text-secondary mt-1">{n.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Yesterday */}
+                {groupedNotifications.yesterday.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="block text-[9px] uppercase font-bold">Yesterday</span>
+                    <div className="space-y-1.5">
+                      {groupedNotifications.yesterday.map(n => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className="p-3 border border-border/50 rounded-xl bg-card hover:bg-hover/30 transition-colors cursor-pointer flex gap-3"
+                        >
+                          <div className="flex-shrink-0 pt-0.5">
+                            <Info size={14} className="text-text-secondary" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-text-main">{n.title}</p>
+                            <p className="text-[10px] text-text-secondary mt-1">{n.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Earlier */}
+                {groupedNotifications.earlier.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="block text-[9px] uppercase font-bold">Earlier</span>
+                    <div className="space-y-1.5">
+                      {groupedNotifications.earlier.map(n => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className="p-3 border border-border/50 rounded-xl bg-card hover:bg-hover/30 transition-colors cursor-pointer flex gap-3"
+                        >
+                          <div className="flex-shrink-0 pt-0.5">
+                            <Info size={14} className="text-text-secondary" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-text-main">{n.title}</p>
+                            <p className="text-[10px] text-text-secondary mt-1">{n.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </Drawer>
     </header>
   );
 };

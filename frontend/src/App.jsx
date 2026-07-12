@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { UIProvider } from './context/UIContext';
 import { AuthProvider } from './context/AuthContext';
 import { router } from './routes';
+import ErrorBoundary from './components/ErrorBoundary';
 import './styles/index.css';
 
 function App() {
@@ -12,7 +13,9 @@ function App() {
     <ThemeProvider>
       <UIProvider>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+          </ErrorBoundary>
           <Toaster position="top-right" reverseOrder={false} />
         </AuthProvider>
       </UIProvider>

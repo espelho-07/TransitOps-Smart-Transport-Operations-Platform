@@ -31,30 +31,31 @@ const TABS = [
 /**
  * High-fidelity details drawer panel (420px) for drivers.
  */
-const DriverDrawer = ({ isOpen, onClose, driverId, onViewProfile, onEditProfile, onUpdate }) => {
+const DriverDrawer = ({ isOpen, onClose, driverId, driver: propDriver, onViewProfile, onEditProfile, onUpdate }) => {
   const { currentUser } = useAuth();
   const isSafety = currentUser?.role === 'Admin' || currentUser?.role === 'Safety Officer';
   const isManager = currentUser?.role === 'Admin' || currentUser?.role === 'Fleet Manager';
 
   // State hooks
-  const [driver, setDriver] = useState(null);
+  const [driverState, setDriverState] = useState(null);
+  const driver = propDriver || driverState;
   const [assignedVehicle, setAssignedVehicle] = useState(null);
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
-    if (isOpen && driverId) {
-      loadDriverData();
+    if (isOpen) {
+      if (propDriver) {
+        loadRelatedData(propDriver);
+      } else if (driverId) {
+        loadDriverData();
+      }
     }
-  }, [isOpen, driverId]);
+  }, [isOpen, driverId, propDriver]);
 
-  const loadDriverData = async () => {
-    setLoading(true);
+  const loadRelatedData = async (data) => {
     try {
-      const data = await driverService.getById(driverId);
-      setDriver(data);
-
       // Load related vehicle
       const allVehicles = await vehicleService.getAll();
       const linked = allVehicles.find(v => v.assignedDriverId === data.id);
@@ -63,6 +64,17 @@ const DriverDrawer = ({ isOpen, onClose, driverId, onViewProfile, onEditProfile,
       // Load related dispatches
       const allTrips = await tripService.getAll();
       setTrips(allTrips.filter(t => t.driverId === data.id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadDriverData = async () => {
+    setLoading(true);
+    try {
+      const data = await driverService.getById(driverId);
+      setDriverState(data);
+      await loadRelatedData(data);
     } catch {
       showToast.error("Failed to load driver details");
     } finally {

@@ -49,9 +49,9 @@ const Trips = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Trips data states
-  const [trips, setTrips] = useState([]);
-  const [vehicles, setVehicles] = useState([]);
-  const [drivers, setDrivers] = useState([]);
+  const [trips, setTrips] = useState(tripService.getAll());
+  const [vehicles, setVehicles] = useState(vehicleService.getAll());
+  const [drivers, setDrivers] = useState(driverService.getAll());
   const [loading, setLoading] = useState(false);
 
   // Toolbar & filter configurations
@@ -68,10 +68,14 @@ const Trips = () => {
   useEffect(() => {
     if (searchParams.get('dispatch') === 'true' || searchParams.get('add') === 'true') {
       setSearchParams({}, { replace: true });
-      setSelectedTripId(null);
-      setIsModalOpen(true);
+      if (isManager) {
+        setSelectedTripId(null);
+        setIsModalOpen(true);
+      } else {
+        showToast.error("Security audit failed. Manager credentials required.");
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, isManager]);
 
   const loadTrips = async () => {
     setLoading(true);
@@ -117,13 +121,18 @@ const Trips = () => {
       );
     }
 
-    // Status filter matches
-    if (filterStatus) {
-      result = result.filter(t => t.status === filterStatus);
+    // Role-based filter: Drivers only see own trips
+    if (currentUser?.role === 'Driver') {
+      const matchingDriver = drivers.find(d => d.email?.toLowerCase().trim() === currentUser.email?.toLowerCase().trim());
+      if (matchingDriver) {
+        result = result.filter(t => t.driverId === matchingDriver.id);
+      } else {
+        result = [];
+      }
     }
 
     return result;
-  }, [trips, searchQuery, filterStatus]);
+  }, [trips, searchQuery, filterStatus, currentUser, drivers]);
 
   // Actions handlers
   const handleViewDetails = (id) => {
@@ -427,6 +436,7 @@ const Trips = () => {
               isOpen={isDrawerOpen}
               onClose={() => setIsDrawerOpen(false)}
               tripId={drawerTripId}
+              trip={trips.find(t => t.id === drawerTripId)}
               onViewProfile={handleViewDetails}
               onEditProfile={handleEditDetails}
               onUpdate={() => { loadTrips(); loadDependencies(); }}

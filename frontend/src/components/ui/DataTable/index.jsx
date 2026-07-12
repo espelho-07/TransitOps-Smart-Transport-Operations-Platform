@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Eye, EyeOff, Loader2, RefreshCw } from 'lucide-react';
 import Button from '../Button';
 import Search from '../Search';
@@ -34,6 +34,24 @@ const DataTable = ({
   emptyMessage = "No records found",
   searchPlaceholder = "Search records..."
 }) => {
+  // Normalize columns to support both key/label/render and accessor/header/cell formats
+  const normalizedColumns = useMemo(() => {
+    return columns.map(c => {
+      const key = c.key || c.accessor || '';
+      const label = c.label || c.header || '';
+      let renderFn = c.render;
+      if (!renderFn && c.cell) {
+        renderFn = (val, row) => c.cell(row);
+      }
+      return {
+        ...c,
+        key,
+        label,
+        render: renderFn
+      };
+    });
+  }, [columns]);
+
   // 1. Internal states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilters, setSelectedFilters] = useState({});
@@ -45,7 +63,14 @@ const DataTable = ({
   
   const [selectedRowIds, setSelectedRowIds] = useState([]);
   const [expandedRowIds, setExpandedRowIds] = useState([]);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState(columns.map(c => c.key));
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => 
+    normalizedColumns.map(c => c.key)
+  );
+
+  // Sync visible column keys if normalizedColumns length shifts
+  useEffect(() => {
+    setVisibleColumnKeys(normalizedColumns.map(c => c.key));
+  }, [normalizedColumns]);
 
   // Reset pagination on filter or search changes
   const handleSearchChange = (query) => {
@@ -131,7 +156,7 @@ const DataTable = ({
   };
 
   // Active columns filtered by visibility toggles
-  const activeColumns = columns.filter(c => visibleColumnKeys.includes(c.key));
+  const activeColumns = normalizedColumns.filter(c => visibleColumnKeys.includes(c.key));
 
   return (
     <div className="space-y-4">
@@ -178,7 +203,7 @@ const DataTable = ({
               Toggle Columns
             </span>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
-              {columns.map(col => {
+              {normalizedColumns.map(col => {
                 const isChecked = visibleColumnKeys.includes(col.key);
                 return (
                   <label key={col.key} className="flex items-center gap-2 text-xs font-semibold text-text-main cursor-pointer">

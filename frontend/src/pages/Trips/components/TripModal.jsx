@@ -90,6 +90,7 @@ const TripModal = ({ isOpen, onClose, tripId, onSave }) => {
     if (!formData.origin.trim()) tempErrors.origin = 'Origin city is required';
     if (!formData.destination.trim()) tempErrors.destination = 'Destination destination is required';
     if (Number(formData.distance) <= 0) tempErrors.distance = 'Route mileage must be positive';
+    if (!formData.cargoWeight) tempErrors.cargoWeight = 'Cargo weight is required';
 
     // 1. Compliance availability validation checks
     if (formData.vehicleId) {
@@ -103,14 +104,29 @@ const TripModal = ({ isOpen, onClose, tripId, onSave }) => {
           tempErrors.vehicleId = 'Selected vehicle is On Trip and unavailable.';
         }
       }
+
+      // Check Cargo Load Weight Capacity
+      if (vehicleObj && formData.cargoWeight) {
+        const weightNum = parseFloat(formData.cargoWeight);
+        const isTon = String(formData.cargoWeight).toLowerCase().includes('ton') || String(formData.cargoWeight).toLowerCase().includes('t');
+        const weightKg = isTon ? weightNum * 1000 : weightNum;
+        const capKg = vehicleObj.capacityKg || 20000;
+        if (weightKg > capKg) {
+          tempErrors.cargoWeight = `Cargo load weight (${formData.cargoWeight}) exceeds vehicle capacity (${capKg / 1000} Tons / ${capKg} kg)!`;
+        }
+      }
     }
 
     if (formData.driverId) {
       const driverObj = drivers.find(d => d.id === formData.driverId);
-      if (driverObj && !isEdit) {
-        if (driverObj.status === 'Suspended') {
+      if (driverObj) {
+        // Expired License Check
+        const isExpired = driverObj.licenseExpiry && new Date(driverObj.licenseExpiry) < new Date();
+        if (isExpired) {
+          tempErrors.driverId = `Driver's license (${driverObj.license}) is expired since ${driverObj.licenseExpiry}. Cannot assign!`;
+        } else if (driverObj.status === 'Suspended') {
           tempErrors.driverId = 'Selected driver is Suspended. Licensing audit failed.';
-        } else if (driverObj.status === 'On Trip') {
+        } else if (driverObj.status === 'On Trip' && !isEdit) {
           tempErrors.driverId = 'Selected driver is On Duty / On Trip. Unavailable.';
         }
       }
@@ -193,7 +209,7 @@ const TripModal = ({ isOpen, onClose, tripId, onSave }) => {
                 className={`w-full text-xs font-semibold bg-card border rounded-lg p-2.5 text-text-main focus:outline-none focus:ring-1 focus:ring-info ${errors.vehicleId ? 'border-danger' : 'border-border'}`}
               >
                 <option value="">Choose Vehicle</option>
-                {vehicles.map(v => (
+                {vehicles.filter(v => v.status === 'Available' || (isEdit && v.id === formData.vehicleId)).map(v => (
                   <option key={v.id} value={v.id}>
                     {v.plateNumber} — {v.make} {v.model} ({v.status})
                   </option>
@@ -216,7 +232,10 @@ const TripModal = ({ isOpen, onClose, tripId, onSave }) => {
                 className={`w-full text-xs font-semibold bg-card border rounded-lg p-2.5 text-text-main focus:outline-none focus:ring-1 focus:ring-info ${errors.driverId ? 'border-danger' : 'border-border'}`}
               >
                 <option value="">Choose Driver</option>
-                {drivers.map(d => (
+                {drivers.filter(d => {
+                  const isExpired = d.licenseExpiry && new Date(d.licenseExpiry) < new Date();
+                  return (d.status === 'Available' && !isExpired) || (isEdit && d.id === formData.driverId);
+                }).map(d => (
                   <option key={d.id} value={d.id}>
                     {d.name} ({d.status})
                   </option>
@@ -266,13 +285,19 @@ const TripModal = ({ isOpen, onClose, tripId, onSave }) => {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-text-secondary font-semibold">Cargo Load Weight</label>
+                <label className="text-xs text-text-secondary font-semibold">Cargo Load Weight *</label>
                 <Input
                   value={formData.cargoWeight}
                   onChange={(e) => handleInputChange('cargoWeight', e.target.value)}
-                  className="text-xs"
+                  className={`text-xs ${errors.cargoWeight ? 'border-danger' : ''}`}
                   placeholder="e.g. 5 Tons"
                 />
+                {errors.cargoWeight && (
+                  <span className="text-[10px] text-danger font-bold flex items-center gap-1 mt-1 bg-danger/5 p-1 rounded border border-danger/10">
+                    <AlertTriangle size={10} />
+                    {errors.cargoWeight}
+                  </span>
+                )}
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-text-secondary font-semibold">Status</label>

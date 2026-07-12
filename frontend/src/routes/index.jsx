@@ -14,17 +14,50 @@ import Expenses from '../pages/Expenses';
 import Reports from '../pages/Reports';
 import Settings from '../pages/Settings';
 import Profile from '../pages/Profile';
-import Login from '../pages/Login';
-import Register from '../pages/Register';
+import Users from '../pages/Users';
+import AuditLogs from '../pages/AuditLogs';
+import HelpCenter from '../pages/HelpCenter';
+import Notifications from '../pages/Notifications';
+import NotFound from '../pages/NotFound';
+import ServerError from '../pages/ServerError';
+import InviteUser from '../pages/InviteUser';
+import Approvals from '../pages/Approvals';
+import LoginPage from '../pages/auth/LoginPage';
+import SignupPage from '../pages/auth/SignupPage';
+import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
+import ResetPassword from '../pages/ResetPassword';
+import EmailVerification from '../pages/EmailVerification';
+import AccessDenied from '../pages/AccessDenied';
+import SessionExpired from '../pages/SessionExpired';
 
 export const router = createBrowserRouter([
   {
     path: '/login',
-    element: <Login />
+    element: <LoginPage />
   },
   {
-    path: '/register',
-    element: <Register />
+    path: '/signup',
+    element: <SignupPage />
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPassword />
+  },
+  {
+    path: '/verify-email',
+    element: <EmailVerification />
+  },
+  {
+    path: '/session-expired',
+    element: <SessionExpired />
+  },
+  {
+    path: '/500',
+    element: <ServerError />
   },
   {
     path: '/',
@@ -64,6 +97,10 @@ export const router = createBrowserRouter([
         element: <Maintenance />
       },
       {
+        path: 'approvals',
+        element: <Approvals />
+      },
+      {
         path: 'fuel',
         element: <FuelLogs />
       },
@@ -84,8 +121,36 @@ export const router = createBrowserRouter([
         element: <Profile />
       },
       {
+        path: 'users',
+        element: <Users />
+      },
+      {
+        path: 'audit-logs',
+        element: <AuditLogs />
+      },
+      {
+        path: 'help',
+        element: <HelpCenter />
+      },
+      {
+        path: 'notifications',
+        element: <Notifications />
+      },
+      {
+        path: 'invite-user',
+        element: <InviteUser />
+      },
+      {
+        path: 'access-denied',
+        element: <AccessDenied />
+      },
+      {
+        path: '404',
+        element: <NotFound />
+      },
+      {
         path: '*',
-        element: <Navigate to="/dashboard" replace />
+        element: <NotFound />
       }
     ]
   }

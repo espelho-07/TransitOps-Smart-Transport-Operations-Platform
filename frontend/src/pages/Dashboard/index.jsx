@@ -28,7 +28,11 @@ import {
   ThumbsDown,
   TrendingUp,
   MapPin,
-  Calendar
+  Calendar,
+  Bell,
+  HelpCircle,
+  Check,
+  X
 } from 'lucide-react';
 
 // UI components
@@ -40,6 +44,7 @@ import Button from '../../components/ui/Button';
 import Drawer from '../../components/ui/Drawer';
 import ImageUpload from '../../components/ui/ImageUpload';
 import { VehicleImage, DriverAvatar } from '../../components/ui/FallbackImage';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 // Mock Services & Context
 import { useAuth, ROLES } from '../../context/AuthContext';
@@ -47,6 +52,9 @@ import { vehicleService } from '../../services/vehicleService';
 import { driverService } from '../../services/driverService';
 import { tripService } from '../../services/tripService';
 import { expenseService } from '../../services/expenseService';
+import { maintenanceService } from '../../services/maintenanceService';
+import { fuelService } from '../../services/fuelService';
+import { notificationService } from '../../services/notificationService';
 import { showToast } from '../../components/ui/Toast';
 
 const Dashboard = () => {
@@ -54,25 +62,45 @@ const Dashboard = () => {
   const { currentUser } = useAuth();
 
   // Global operational states
-  const [vehicles, setVehicles] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [trips, setTrips] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [vehicles, setVehicles] = useState(vehicleService.getAll());
+  const [drivers, setDrivers] = useState(driverService.getAll());
+  const [trips, setTrips] = useState(tripService.getAll());
+  const [expenses, setExpenses] = useState(expenseService.getAll());
+  const [maintenance, setMaintenance] = useState(maintenanceService.getAll());
+  const [fuelLogs, setFuelLogs] = useState(fuelService.getAll());
+  const [notifications, setNotifications] = useState(notificationService.getAll());
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Time & Date Header states
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   // Trip Drawer states
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [isTripDrawerOpen, setIsTripDrawerOpen] = useState(false);
 
   // Driver mobile workspace inputs
-  const [driverTripStatus, setDriverTripStatus] = useState('Scheduled'); // Scheduled | Active | Paused | Completed
+  const [driverTripStatus, setDriverTripStatus] = useState('Scheduled');
   const [deliveryProofImage, setDeliveryProofImage] = useState(null);
   const [isFuelModalOpen, setIsFuelModalOpen] = useState(false);
   const [isReportIssueModalOpen, setIsReportIssueModalOpen] = useState(false);
   const [fuelLiters, setFuelLiters] = useState('');
   const [fuelCost, setFuelCost] = useState('');
   const [reportedIssueDesc, setReportedIssueDesc] = useState('');
+
+  // Confirmation Modal state
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  // Clock Update
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchOperationalData();
@@ -83,17 +111,23 @@ const Dashboard = () => {
     else setIsRefreshing(true);
 
     try {
-      const [vData, dData, tData, eData] = await Promise.all([
+      const [vData, dData, tData, eData, mData, fData, nData] = await Promise.all([
         vehicleService.getAll(),
         driverService.getAll(),
         tripService.getAll(),
-        expenseService.getAll()
+        expenseService.getAll(),
+        maintenanceService.getAll(),
+        fuelService.getAll(),
+        notificationService.getAll()
       ]);
 
       setVehicles(vData);
       setDrivers(dData);
       setTrips(tData);
       setExpenses(eData);
+      setMaintenance(mData);
+      setFuelLogs(fData);
+      setNotifications(nData);
     } catch (err) {
       showToast.error('Encountered an exception mapping command center logs');
     } finally {
@@ -107,62 +141,63 @@ const Dashboard = () => {
     const activeVehicles = vehicles.filter(v => !v.isArchived);
     const available = activeVehicles.filter(v => v.status === 'Available').length;
     const onTrip = activeVehicles.filter(v => v.status === 'On Trip').length;
-    const maintenance = activeVehicles.filter(v => v.status === 'Maintenance').length;
+    const maintenanceCount = activeVehicles.filter(v => v.status === 'Maintenance').length;
     const retired = activeVehicles.filter(v => v.status === 'Retired').length;
+    
     const availableDriversCount = drivers.filter(d => d.status === 'Available').length;
     
-    // Compliance & Expiries Count
-    const now = new Date();
-    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const insuranceExpiredCount = activeVehicles.filter(v => v.insuranceExpiry && new Date(v.insuranceExpiry) < thirtyDaysFromNow).length;
-    const permitExpiredCount = activeVehicles.filter(v => v.permitExpiry && new Date(v.permitExpiry) < thirtyDaysFromNow).length;
-    const driverLicenseExpiredCount = drivers.filter(d => d.status === 'Suspended').length;
+    // Count today's trips
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayTrips = trips.filter(t => t.startDate?.includes(todayStr) || t.status === 'Active').length;
 
     return {
       totalVehicles: activeVehicles.length,
       available,
       onTrip,
-      maintenance,
+      maintenance: maintenanceCount,
       retired,
       availableDriversCount,
-      insuranceExpiredCount,
-      permitExpiredCount,
-      driverLicenseExpiredCount,
-      totalAlerts: insuranceExpiredCount + permitExpiredCount + driverLicenseExpiredCount
+      todayTrips
     };
-  }, [vehicles, drivers]);
+  }, [vehicles, drivers, trips]);
 
   // 2. Financial Metrics
   const financialMetrics = useMemo(() => {
-    const totalExpenses = expenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+    // Only approved expenses are included in reports / summaries
+    const approvedExpenses = expenses.filter(e => e.status === 'Approved');
+    const totalExpenses = approvedExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
     const pendingExpenses = expenses.filter(e => e.status === 'Pending');
-    const approvedExpensesCount = expenses.filter(e => e.status === 'Approved').length;
-    
-    // Top Expensive vehicles analysis
-    const costMap = {};
-    expenses.forEach(e => {
-      if (e.vehicleId) {
-        costMap[e.vehicleId] = (costMap[e.vehicleId] || 0) + e.amount;
-      }
-    });
 
-    const topExpensive = Object.keys(costMap)
-      .map(id => ({
-        id,
-        amount: costMap[id],
-        plate: vehicles.find(v => v.id === id)?.plateNumber || id,
-        model: vehicles.find(v => v.id === id)?.model || 'Unknown Model'
-      }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5);
+    const fuelCostTotal = approvedExpenses.filter(e => e.category === 'Fuel').reduce((acc, e) => acc + e.amount, 0);
+    const maintCostTotal = approvedExpenses.filter(e => e.category === 'Maintenance' || e.category === 'Repair').reduce((acc, e) => acc + e.amount, 0);
+    const otherCostTotal = approvedExpenses.filter(e => e.category !== 'Fuel' && e.category !== 'Maintenance' && e.category !== 'Repair').reduce((acc, e) => acc + e.amount, 0);
+    
+    // Budget usage (e.g. monthly budget is 1,500,000 INR)
+    const monthlyBudget = 1500000;
+    const budgetUsagePercent = Math.min(Math.round((totalExpenses / monthlyBudget) * 100), 100);
 
     return {
       totalExpenses,
       pendingExpenses,
-      approvedExpensesCount,
-      topExpensive
+      fuelCostTotal,
+      maintCostTotal,
+      otherCostTotal,
+      budgetUsagePercent
     };
-  }, [expenses, vehicles]);
+  }, [expenses]);
+
+  const pendingCounts = useMemo(() => {
+    return {
+      vehicles: vehicles.filter(v => v.status === 'Pending Approval').length,
+      drivers: drivers.filter(d => d.status === 'Pending Approval').length,
+      maintenance: maintenance.filter(m => m.status === 'Pending').length,
+      expenses: expenses.filter(e => e.status === 'Pending').length,
+      total: vehicles.filter(v => v.status === 'Pending Approval').length +
+             drivers.filter(d => d.status === 'Pending Approval').length +
+             maintenance.filter(m => m.status === 'Pending').length +
+             expenses.filter(e => e.status === 'Pending').length
+    };
+  }, [vehicles, drivers, maintenance, expenses]);
 
   // 3. Driver context specific objects
   const driverVehicle = useMemo(() => {
@@ -172,52 +207,51 @@ const Dashboard = () => {
 
   const driverTrip = useMemo(() => {
     if (currentUser.role !== ROLES.DRIVER) return null;
-    // Find active or scheduled trip for D002 (Sarah Jenkins)
-    return trips.find(t => t.driverId === 'D002' && t.status !== 'Completed') || trips[0];
-  }, [currentUser, trips]);
+    const matchingDriver = drivers.find(d => d.email === currentUser.email);
+    if (!matchingDriver) return null;
+    return trips.find(t => t.driverId === matchingDriver.id && t.status !== 'Completed') || null;
+  }, [currentUser, trips, drivers]);
 
   // Actions
-  const handleApproveExpense = async (id) => {
-    try {
-      const updated = await expenseService.update(id, { status: 'Approved' });
-      setExpenses(prev => prev.map(e => e.id === id ? updated : e));
-      showToast.success('Transaction approved');
-    } catch {
-      showToast.error('Operation failed');
-    }
+  const handleApproveExpense = (id) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Approve Expense Transaction',
+      message: 'Are you sure you want to approve this expense record? Approved expenses will be factored into all reporting statements.',
+      onConfirm: async () => {
+        try {
+          const updated = await expenseService.update(id, { status: 'Approved' });
+          setExpenses(prev => prev.map(e => e.id === id ? updated : e));
+          showToast.success('Expense transaction approved');
+          fetchOperationalData(true);
+        } catch {
+          showToast.error('Operation failed');
+        }
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
-  const handleRejectExpense = async (id) => {
-    try {
-      const updated = await expenseService.update(id, { status: 'Rejected' });
-      setExpenses(prev => prev.map(e => e.id === id ? updated : e));
-      showToast.success('Transaction marked as Rejected');
-    } catch {
-      showToast.error('Operation failed');
-    }
+  const handleRejectExpense = (id) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Reject Expense Transaction',
+      message: 'Are you sure you want to reject this expense? Rejected transactions will be excluded from all dashboards and financial statements.',
+      onConfirm: async () => {
+        try {
+          const updated = await expenseService.update(id, { status: 'Rejected' });
+          setExpenses(prev => prev.map(e => e.id === id ? updated : e));
+          showToast.success('Expense transaction marked as Rejected');
+          fetchOperationalData(true);
+        } catch {
+          showToast.error('Operation failed');
+        }
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
-  const handleSuspendDriver = async (id) => {
-    try {
-      const updated = await driverService.update(id, { status: 'Suspended' });
-      setDrivers(prev => prev.map(d => d.id === id ? updated : d));
-      showToast.success(`Driver ${id} license marked suspended`);
-    } catch {
-      showToast.error('Operation failed');
-    }
-  };
-
-  const handleActivateDriver = async (id) => {
-    try {
-      const updated = await driverService.update(id, { status: 'Available' });
-      setDrivers(prev => prev.map(d => d.id === id ? updated : d));
-      showToast.success(`Driver ${id} license validated successfully`);
-    } catch {
-      showToast.error('Operation failed');
-    }
-  };
-
-  // Driver interactive mock logs
+  // Driver interactive updates
   const handleDriverFuelLogSubmit = (e) => {
     e.preventDefault();
     if (!fuelLiters || !fuelCost) {
@@ -246,574 +280,569 @@ const Dashboard = () => {
     setIsTripDrawerOpen(true);
   };
 
-  // -------------------------------------------------------------
-  // VIEW RENDERERS BY ROLE
-  // -------------------------------------------------------------
+  // WORKSPACE VIEW RENDERERS
 
-  // Render 1: ADMIN WORKSPACE
-  const renderAdminWorkspace = () => {
+  // 1. FLEET MANAGER DASHBOARD (Fit to one screen, focused cards, approvals list)
+  const renderFleetManagerWorkspace = () => {
     const recentTripsList = trips.slice(0, 5);
+    const recentNotifsList = notifications.slice(0, 5);
+
     return (
       <div className="space-y-6 text-left">
-        {/* Fleet Snapshot KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Total Fleet</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.totalVehicles}</span>
-            </div>
-            <div className="p-2 bg-info/10 text-info rounded-lg"><Truck size={15} /></div>
+        {/* Header Greeting Banner */}
+        <div className="bg-card border border-border rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div>
+            <h3 className="text-sm font-black text-text-main uppercase tracking-wider">Fleet Management Desk</h3>
+            <p className="text-xs text-text-secondary font-semibold mt-1">
+              Live updates: {currentTime.toLocaleDateString()} at {currentTime.toLocaleTimeString()}
+            </p>
           </div>
-
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Available</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.available}</span>
-            </div>
-            <div className="p-2 bg-success/15 text-success rounded-lg"><CheckCircle size={15} /></div>
-          </div>
-
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">On Trip</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.onTrip}</span>
-            </div>
-            <div className="p-2 bg-info/15 text-info rounded-lg"><Compass size={15} /></div>
-          </div>
-
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Maintenance</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.maintenance}</span>
-            </div>
-            <div className="p-2 bg-warning/15 text-warning rounded-lg"><Wrench size={15} /></div>
-          </div>
-
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Retired</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.retired}</span>
-            </div>
-            <div className="p-2 bg-hover text-text-secondary rounded-lg"><AlertTriangle size={15} /></div>
-          </div>
-
-          <div className={`p-4 rounded-xl border flex items-start justify-between shadow-xs ${stats.insuranceExpiredCount > 0 ? 'bg-danger/5 border-danger/25 text-danger' : 'bg-card border-border'}`}>
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Insurance Expiring</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.insuranceExpiredCount}</span>
-            </div>
-            <div className={`p-2 rounded-lg ${stats.insuranceExpiredCount > 0 ? 'bg-danger/15 text-danger' : 'bg-hover'}`}><AlertCircle size={15} /></div>
-          </div>
-        </div>
-
-        {/* Mid Section: Pending Approvals & Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Pending Approvals */}
-          <Card title="Operational Pending Approvals" subtitle="Awaiting validation of expenses and major maintenance tasks" className="border-border shadow-sm flex flex-col justify-between">
-            {financialMetrics.pendingExpenses.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-xs font-semibold text-text-secondary">
-                <CheckCircle size={32} className="text-success mb-2" />
-                <span>All pending tasks approved. Complete!</span>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                {financialMetrics.pendingExpenses.slice(0, 4).map(e => (
-                  <div key={e.id} className="flex items-center justify-between p-3 bg-hover/10 border border-border/80 rounded-xl">
-                    <div className="text-xs space-y-1">
-                      <span className="block font-bold text-text-main">{e.category} — {e.merchant}</span>
-                      <span className="block text-[10px] text-text-secondary font-semibold">Vehicle: {e.vehicleId} &middot; Cost: INR {e.amount?.toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Button variant="outline" size="sm" onClick={() => handleApproveExpense(e.id)} className="p-1 text-success border-success/30 hover:bg-success/5"><ThumbsUp size={12} /></Button>
-                      <Button variant="outline" size="sm" onClick={() => handleRejectExpense(e.id)} className="p-1 text-danger border-danger/30 hover:bg-danger/5"><ThumbsDown size={12} /></Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          {/* Quick Actions Console */}
-          <Card title="Quick Admin Console" subtitle="Administrative configuration dispatches" className="border-border shadow-sm">
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => navigate('/vehicles/add')} className="flex items-center gap-3 p-4 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all">
-                <div className="p-3 bg-card border border-border rounded-xl text-text-secondary"><Plus size={16} /></div>
-                <div className="text-left"><span className="block text-xs font-bold text-text-main">Register Vehicle</span><span className="block text-[10px] text-text-secondary font-medium">Add to fleet inventory</span></div>
-              </button>
-              <button onClick={() => navigate('/drivers')} className="flex items-center gap-3 p-4 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all">
-                <div className="p-3 bg-card border border-border rounded-xl text-text-secondary"><Users size={16} /></div>
-                <div className="text-left"><span className="block text-xs font-bold text-text-main">Manage Drivers</span><span className="block text-[10px] text-text-secondary font-medium">Update operator registry</span></div>
-              </button>
-              <button onClick={() => navigate('/trips/dispatch')} className="flex items-center gap-3 p-4 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all">
-                <div className="p-3 bg-card border border-border rounded-xl text-text-secondary"><Compass size={16} /></div>
-                <div className="text-left"><span className="block text-xs font-bold text-text-main">Create Trip</span><span className="block text-[10px] text-text-secondary font-medium">Dispatch active route</span></div>
-              </button>
-              <button onClick={() => navigate('/expenses')} className="flex items-center gap-3 p-4 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all">
-                <div className="p-3 bg-card border border-border rounded-xl text-text-secondary"><DollarSign size={16} /></div>
-                <div className="text-left"><span className="block text-xs font-bold text-text-main">Expense Audit</span><span className="block text-[10px] text-text-secondary font-medium">Validate financial cost logs</span></div>
-              </button>
-            </div>
-          </Card>
-        </div>
-
-        {/* Recent Trips */}
-        <Card title="Recent Logistics Dispatches" subtitle="Active dispatches status summaries" actions={<Button variant="outline" size="sm" onClick={() => navigate('/trips')} className="text-xs">View All Trips</Button>}>
-          <div className="overflow-x-auto border border-border/80 rounded-xl">
-            <table className="w-full text-xs text-text-secondary text-left border-collapse font-semibold">
-              <thead>
-                <tr className="border-b border-border bg-hover/10 text-[10px] text-text-secondary/70 uppercase">
-                  <th className="py-3 px-4">Trip ID</th>
-                  <th className="py-3 px-4">Vehicle</th>
-                  <th className="py-3 px-4">Driver</th>
-                  <th className="py-3 px-4">Destination</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">ETA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTripsList.map(trip => {
-                  const vehicleObj = vehicles.find(v => v.id === trip.vehicleId);
-                  const driverObj = drivers.find(d => d.id === trip.driverId);
-                  return (
-                    <tr key={trip.id} onClick={() => handleRowClick(trip)} className="border-b border-border/60 hover:bg-hover/20 cursor-pointer transition-colors">
-                      <td className="py-3 px-4 font-bold text-info">{trip.tripNumber}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <VehicleImage src={vehicleObj?.image} size={32} />
-                          <span>{vehicleObj?.plateNumber || trip.vehicleId}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <DriverAvatar name={driverObj?.name} avatarUrl={driverObj?.avatar} size={28} />
-                          <span>{driverObj?.name || 'Unassigned'}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">{trip.destination}</td>
-                      <td className="py-3 px-4"><Badge status={trip.status} /></td>
-                      <td className="py-3 px-4 text-text-main font-bold">45 mins</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
-    );
-  };
-
-  // Render 2: FLEET MANAGER WORKSPACE
-  const renderFleetManagerWorkspace = () => {
-    return renderAdminWorkspace(); // Shares layout structures, filters specific modules via sidebar checks
-  };
-
-  // Render 3: DRIVER WORKSPACE (Simplified, Mobile-Friendly)
-  const renderDriverWorkspace = () => {
-    return (
-      <div className="space-y-6 text-left max-w-2xl mx-auto">
-        {/* Header driver welcome */}
-        <div className="bg-gradient-to-r from-info/20 to-card border border-border p-5 rounded-2xl flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-4">
-            <DriverAvatar name={currentUser.name} avatarUrl={currentUser.avatar} size={56} />
-            <div className="space-y-0.5">
-              <span className="block text-[10px] font-bold text-text-secondary uppercase tracking-widest">Logged in Driver</span>
-              <h2 className="text-base font-black text-text-main">{currentUser.name}</h2>
-              <span className="inline-flex px-2 py-0.5 bg-success/15 border border-success/30 text-success text-[9px] font-bold uppercase rounded">On Duty</span>
-            </div>
-          </div>
-          <Button variant="danger" size="sm" onClick={() => showToast.error('SOS emergency dispatch alert sent to headquarters!')} className="text-xs uppercase tracking-wider font-bold">
-            Emergency SOS
+          <Button variant="outline" size="sm" onClick={() => fetchOperationalData(true)} className="flex items-center gap-1.5 font-bold">
+            <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+            <span>Sync Registry</span>
           </Button>
         </div>
 
-        {/* Grid: Trip Details & Vehicle Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Today's Active Trip Card */}
-          <Card title="Today's Assigned Trip" subtitle="Active cargo route schedule details">
-            {driverTrip ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 bg-hover/10 border border-border/80 p-3 rounded-xl">
-                  <MapPin size={18} className="text-info" />
-                  <div className="text-xs text-left">
-                    <span className="block text-[10px] text-text-secondary uppercase">Destination Route</span>
-                    <span className="text-text-main font-black block text-sm mt-0.5">
-                      {driverTrip.origin} &rarr; {driverTrip.destination}
+        {/* 6 KPI Cards Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">Total Fleet</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-2xl font-black text-text-main leading-none">{stats.totalVehicles}</span>
+              <Truck size={16} className="text-info" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">Available</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-2xl font-black text-success leading-none">{stats.available}</span>
+              <CheckCircle size={16} className="text-success" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">On Trip</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-2xl font-black text-info leading-none">{stats.onTrip}</span>
+              <Compass size={16} className="text-info" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">Maintenance</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-2xl font-black text-warning leading-none">{stats.maintenance}</span>
+              <Wrench size={16} className="text-warning" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">Drivers Avail</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-2xl font-black text-success leading-none">{stats.availableDriversCount}</span>
+              <Users size={16} className="text-success" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">Today's Trips</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-2xl font-black text-text-main leading-none">{stats.todayTrips}</span>
+              <Layers size={16} className="text-info" />
+            </div>
+          </div>
+        </div>
+
+        {/* Pending Approvals & Quick Actions */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Pending Approvals List */}
+          <div className="lg:col-span-2">
+            <Card 
+              title="Operational Approval Center" 
+              subtitle="Pending authorizations required to execute fleet operations" 
+              className="h-full"
+              actions={
+                <Button variant="info" size="sm" onClick={() => navigate('/approvals')} className="text-xs font-bold">
+                  Open Approval Center &rarr;
+                </Button>
+              }
+            >
+              {pendingCounts.total === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-xs font-semibold text-text-secondary">
+                  <CheckCircle size={32} className="text-success mb-2" />
+                  <span>All fleet operations are cleared and authorized!</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
+                  <div className="p-4 bg-hover/10 border border-border/80 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="block font-bold text-text-main">Vehicle Registrations</span>
+                      <span className="block text-[10.5px] text-text-secondary mt-0.5">Awaiting regulatory compliance review</span>
+                    </div>
+                    <span className={`text-base font-black px-2.5 py-1 rounded-lg ${pendingCounts.vehicles > 0 ? 'bg-danger/10 text-danger' : 'bg-hover text-text-secondary'}`}>
+                      {pendingCounts.vehicles}
+                    </span>
+                  </div>
+
+                  <div className="p-4 bg-hover/10 border border-border/80 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="block font-bold text-text-main">Driver Credentials</span>
+                      <span className="block text-[10.5px] text-text-secondary mt-0.5">Licensing background checks pending</span>
+                    </div>
+                    <span className={`text-base font-black px-2.5 py-1 rounded-lg ${pendingCounts.drivers > 0 ? 'bg-danger/10 text-danger' : 'bg-hover text-text-secondary'}`}>
+                      {pendingCounts.drivers}
+                    </span>
+                  </div>
+
+                  <div className="p-4 bg-hover/10 border border-border/80 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="block font-bold text-text-main">Maintenance Scheduling</span>
+                      <span className="block text-[10.5px] text-text-secondary mt-0.5">Commercial repair order approvals</span>
+                    </div>
+                    <span className={`text-base font-black px-2.5 py-1 rounded-lg ${pendingCounts.maintenance > 0 ? 'bg-warning/10 text-warning' : 'bg-hover text-text-secondary'}`}>
+                      {pendingCounts.maintenance}
+                    </span>
+                  </div>
+
+                  <div className="p-4 bg-hover/10 border border-border/80 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="block font-bold text-text-main">Expense Invoices</span>
+                      <span className="block text-[10.5px] text-text-secondary mt-0.5">General ledger transaction audits</span>
+                    </div>
+                    <span className={`text-base font-black px-2.5 py-1 rounded-lg ${pendingCounts.expenses > 0 ? 'bg-warning/10 text-warning' : 'bg-hover text-text-secondary'}`}>
+                      {pendingCounts.expenses}
                     </span>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div className="border border-border/50 p-2.5 rounded-lg">
-                    <span className="block text-[10px] text-text-secondary uppercase">Cargo Weight</span>
-                    <span className="font-bold text-text-main">{driverTrip.cargoWeight || '1.5 Tons'}</span>
-                  </div>
-                  <div className="border border-border/50 p-2.5 rounded-lg">
-                    <span className="block text-[10px] text-text-secondary uppercase">Distance</span>
-                    <span className="font-bold text-text-main">{driverTrip.distance} km</span>
-                  </div>
-                </div>
-
-                {/* Progress Visual Bar */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-text-secondary">
-                    <span>Trip Status: {driverTripStatus}</span>
-                    <span>{driverTripStatus === 'Completed' ? '100%' : driverTripStatus === 'Active' ? '65%' : '0%'}</span>
-                  </div>
-                  <div className="w-full bg-hover h-2 rounded overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-300 ${driverTripStatus === 'Completed' ? 'bg-success' : 'bg-info'}`}
-                      style={{ width: driverTripStatus === 'Completed' ? '100%' : driverTripStatus === 'Active' ? '65%' : '15%' }}
-                    />
-                  </div>
-                </div>
-
-                {/* Trip State Controls */}
-                <div className="flex gap-2">
-                  {driverTripStatus === 'Scheduled' && (
-                    <Button variant="primary" onClick={() => { setDriverTripStatus('Active'); showToast.success('Trip started'); }} leftIcon={Play} className="w-full text-xs">
-                      Start Trip
-                    </Button>
-                  )}
-                  {driverTripStatus === 'Active' && (
-                    <>
-                      <Button variant="outline" onClick={() => { setDriverTripStatus('Paused'); showToast.info('Trip paused'); }} leftIcon={Pause} className="w-1/2 text-xs">
-                        Pause
-                      </Button>
-                      <Button variant="success" onClick={() => { setDriverTripStatus('Completed'); showToast.success('Trip completed'); }} leftIcon={CheckSquare} className="w-1/2 text-xs">
-                        Complete
-                      </Button>
-                    </>
-                  )}
-                  {driverTripStatus === 'Paused' && (
-                    <Button variant="primary" onClick={() => { setDriverTripStatus('Active'); showToast.success('Trip resumed'); }} leftIcon={Play} className="w-full text-xs">
-                      Resume Trip
-                    </Button>
-                  )}
-                  {driverTripStatus === 'Completed' && (
-                    <span className="block text-center w-full py-2 bg-success/10 border border-success/30 text-success text-xs font-bold rounded-lg uppercase tracking-wider">
-                      Trip Successfully Completed
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-6 text-xs text-text-secondary font-semibold">
-                No active routes assigned.
-              </div>
-            )}
-          </Card>
-
-          {/* Assigned Vehicle specifications */}
-          <Card title="Assigned Vehicle Card" subtitle="Current vehicle specifications and stats">
-            {driverVehicle ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <VehicleImage src={driverVehicle.image} size={56} className="rounded-xl border border-border" />
-                  <div className="text-left text-xs">
-                    <h4 className="font-black text-text-main text-sm leading-tight">{driverVehicle.make} {driverVehicle.model}</h4>
-                    <span className="block text-[10px] text-text-secondary uppercase font-semibold mt-0.5">{driverVehicle.plateNumber}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3.5 text-xs font-semibold text-text-secondary">
-                  <div className="border border-border/40 p-2 rounded bg-hover/10">
-                    <span className="block text-[9px] uppercase">Odometer</span>
-                    <span className="text-text-main font-bold">{driverVehicle.odometer?.toLocaleString()} km</span>
-                  </div>
-                  <div className="border border-border/40 p-2 rounded bg-hover/10">
-                    <span className="block text-[9px] uppercase">Fuel level</span>
-                    <span className="text-text-main font-bold">{driverVehicle.fuelLevel}%</span>
-                  </div>
-                </div>
-
-                {/* Document warning checklist */}
-                <div className="p-2 border border-border/60 rounded bg-hover/5 space-y-1.5">
-                  <span className="block text-[9.5px] font-bold text-text-secondary uppercase">Compliance Statuses</span>
-                  <div className="flex gap-2">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success"><CheckCircle size={10} /> Insurance Valid</span>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success"><CheckCircle size={10} /> Permit Valid</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-6 text-xs text-text-secondary font-semibold">
-                No assigned vehicle.
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/* Quick Driver Action Controls */}
-        <Card title="Quick Operations Logging" subtitle="Log fuel cards, upload delivery records, or register diagnostic checks">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <button onClick={() => setIsFuelModalOpen(true)} className="flex items-center gap-3 p-4 bg-hover/20 hover:bg-hover/45 border border-border rounded-xl transition-all">
-              <div className="p-3 bg-card border border-border rounded-xl text-text-secondary"><Fuel size={16} /></div>
-              <div className="text-left"><span className="block text-xs font-bold text-text-main">Log Fuel Card</span></div>
-            </button>
-            <button onClick={() => setIsReportIssueModalOpen(true)} className="flex items-center gap-3 p-4 bg-hover/20 hover:bg-hover/45 border border-border rounded-xl transition-all">
-              <div className="p-3 bg-card border border-border rounded-xl text-text-secondary"><Wrench size={16} /></div>
-              <div className="text-left"><span className="block text-xs font-bold text-text-main">Report Issue</span></div>
-            </button>
-            <div className="flex items-center gap-3 p-4 bg-hover/20 border border-border rounded-xl">
-              <div className="p-3 bg-card border border-border rounded-xl text-text-secondary"><Upload size={16} /></div>
-              <div className="text-left">
-                <span className="block text-xs font-bold text-text-main mb-1.5">Delivery Slip</span>
-                <label className="cursor-pointer">
-                  <input type="file" accept="image/*" onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      setDeliveryProofImage(URL.createObjectURL(file));
-                      showToast.success('Delivery slip photo uploaded!');
-                    }
-                  }} className="hidden" />
-                  <span className="px-2 py-1 bg-card border border-border rounded text-[10px] font-bold text-text-main hover:bg-hover select-none">
-                    {deliveryProofImage ? 'Replace Photo' : 'Upload File'}
-                  </span>
-                </label>
-              </div>
-            </div>
+              )}
+            </Card>
           </div>
-          {deliveryProofImage && (
-            <div className="mt-4 p-3 border border-border rounded-xl flex items-center gap-3.5 bg-success/5 border-success/15 w-max">
-              <img src={deliveryProofImage} alt="Delivery proof" className="h-14 w-14 object-cover border rounded border-border/80 shadow-sm" />
-              <div className="text-left">
-                <span className="block text-xs font-bold text-success">Delivery Proof Validated</span>
-                <span className="block text-[9.5px] text-text-secondary font-semibold">Simulated receipt attachment complete</span>
+
+          {/* Quick Actions Console */}
+          <div className="lg:col-span-1">
+            <Card title="Operations Console" subtitle="Administrative actions registry" className="h-full">
+              <div className="grid grid-cols-1 gap-2.5">
+                <button onClick={() => navigate('/vehicles?add=true')} className="flex items-center gap-3 p-3 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all w-full text-left">
+                  <div className="p-2.5 bg-card border border-border rounded-lg text-text-secondary"><Plus size={15} /></div>
+                  <div><span className="block text-xs font-bold text-text-main">Register Vehicle</span><span className="block text-[9px] text-text-secondary font-medium">Add new vehicle fleet</span></div>
+                </button>
+                <button onClick={() => navigate('/drivers?add=true')} className="flex items-center gap-3 p-3 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all w-full text-left">
+                  <div className="p-2.5 bg-card border border-border rounded-lg text-text-secondary"><Users size={15} /></div>
+                  <div><span className="block text-xs font-bold text-text-main">Register Driver</span><span className="block text-[9px] text-text-secondary font-medium">Add custodian driver logs</span></div>
+                </button>
+                <button onClick={() => navigate('/trips/dispatch')} className="flex items-center gap-3 p-3 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all w-full text-left">
+                  <div className="p-2.5 bg-card border border-border rounded-lg text-text-secondary"><Compass size={15} /></div>
+                  <div><span className="block text-xs font-bold text-text-main">Create Trip</span><span className="block text-[9px] text-text-secondary font-medium">Dispatch cargo routing</span></div>
+                </button>
+                <button onClick={() => navigate('/maintenance')} className="flex items-center gap-3 p-3 bg-hover/20 hover:bg-hover/40 border border-border/60 hover:border-border rounded-xl transition-all w-full text-left">
+                  <div className="p-2.5 bg-card border border-border rounded-lg text-text-secondary"><Wrench size={15} /></div>
+                  <div><span className="block text-xs font-bold text-text-main">Maintenance Service</span><span className="block text-[9px] text-text-secondary font-medium">Schedule mechanics dispatch</span></div>
+                </button>
               </div>
-            </div>
-          )}
-        </Card>
-
-        {/* Modal: Log Fuel */}
-        {isFuelModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-            <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
-              <div className="text-left"><h3 className="text-sm font-black text-text-main uppercase tracking-wider">Log Fuel Entry</h3><p className="text-xs text-text-secondary mt-0.5">Input refueling details for the commercial card expense</p></div>
-              <form onSubmit={handleDriverFuelLogSubmit} className="space-y-4 text-left">
-                <div className="space-y-1">
-                  <label className="text-xs text-text-secondary font-semibold">Refueling Liters</label>
-                  <input type="number" required value={fuelLiters} onChange={(e) => setFuelLiters(e.target.value)} className="w-full text-xs bg-hover/10 border border-border rounded-lg p-2 text-text-main focus:outline-none" placeholder="e.g. 45" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-text-secondary font-semibold">Total Cost (INR)</label>
-                  <input type="number" required value={fuelCost} onChange={(e) => setFuelCost(e.target.value)} className="w-full text-xs bg-hover/10 border border-border rounded-lg p-2 text-text-main focus:outline-none" placeholder="e.g. 4500" />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" type="button" onClick={() => setIsFuelModalOpen(false)} className="w-1/2 text-xs">Cancel</Button>
-                  <Button variant="primary" type="submit" className="w-1/2 text-xs">Save Entry</Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: Report Issue */}
-        {isReportIssueModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-            <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
-              <div className="text-left"><h3 className="text-sm font-black text-text-main uppercase tracking-wider">Report Vehicle Issue</h3><p className="text-xs text-text-secondary mt-0.5">Describe mechanical or electrical faults observed</p></div>
-              <form onSubmit={handleDriverIssueReportSubmit} className="space-y-4 text-left">
-                <div className="space-y-1">
-                  <label className="text-xs text-text-secondary font-semibold">Diagnostic Notes</label>
-                  <textarea required value={reportedIssueDesc} onChange={(e) => setReportedIssueDesc(e.target.value)} className="w-full text-xs bg-hover/10 border border-border rounded-lg p-2 text-text-main focus:outline-none h-20 resize-none" placeholder="e.g. Air brake warning light flashing..." />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" type="button" onClick={() => setIsReportIssueModalOpen(false)} className="w-1/2 text-xs">Cancel</Button>
-                  <Button variant="danger" type="submit" className="w-1/2 text-xs">Report Incident</Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Render 4: SAFETY OFFICER WORKSPACE (Compliance Oversight)
-  const renderSafetyOfficerWorkspace = () => {
-    // Collect alerts expiring soon from database
-    const complianceWatchlist = vehicles.filter(v => {
-      const now = new Date();
-      const thirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      return (v.insuranceExpiry && new Date(v.insuranceExpiry) < thirtyDays) || 
-             (v.fitnessExpiry && new Date(v.fitnessExpiry) < thirtyDays);
-    }).slice(0, 5);
-
-    // List drivers with suspended or review licenses
-    const driverWatchlist = drivers.filter(d => d.status === 'Suspended' || d.ratings < 4.4).slice(0, 5);
-
-    return (
-      <div className="space-y-6 text-left">
-        {/* Compliance Snapshot metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Expired Licenses</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.driverLicenseExpiredCount}</span>
-            </div>
-            <div className="p-2 bg-danger/10 text-danger rounded-lg"><AlertTriangle size={15} /></div>
-          </div>
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Compliance Alerts</span>
-              <span className="text-2xl font-black text-text-main leading-none">{stats.totalAlerts}</span>
-            </div>
-            <div className="p-2 bg-warning/10 text-warning rounded-lg"><AlertCircle size={15} /></div>
-          </div>
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Avg Safety Rating</span>
-              <span className="text-2xl font-black text-text-main leading-none">4.7 / 5</span>
-            </div>
-            <div className="p-2 bg-success/15 text-success rounded-lg"><CheckCircle size={15} /></div>
-          </div>
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Active Watchlist</span>
-              <span className="text-2xl font-black text-text-main leading-none">{complianceWatchlist.length}</span>
-            </div>
-            <div className="p-2 bg-info/10 text-info rounded-lg"><Users size={15} /></div>
+            </Card>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Compliance Expiries watchlist */}
-          <Card title="Upcoming Asset Compliance Expiries" subtitle="Vehicles with expiring insurance policies or fitness certificates">
-            <div className="space-y-3.5">
-              {complianceWatchlist.map(v => (
-                <div key={v.id} className="flex items-center justify-between p-3.5 bg-hover/10 border border-border/80 rounded-xl">
-                  <div className="text-xs text-left space-y-1">
-                    <span className="block font-bold text-text-main">{v.plateNumber} — {v.model}</span>
-                    <span className="block text-[10px] text-danger font-semibold">Insurance Exp: {v.insuranceExpiry} &middot; Fitness Exp: {v.fitnessExpiry}</span>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => navigate('/vehicles')} className="text-xs">
-                    Review Doc
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Driver License suspension workspace */}
-          <Card title="Driver Certification & Safety Watchlist" subtitle="Commercial operators under safety rating reviews or suspensions">
-            <div className="space-y-3.5">
-              {driverWatchlist.map(d => (
-                <div key={d.id} className="flex items-center justify-between p-3.5 bg-hover/10 border border-border/80 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <DriverAvatar name={d.name} avatarUrl={d.avatar} size={36} />
-                    <div className="text-xs text-left space-y-0.5">
-                      <span className="block font-bold text-text-main">{d.name} ({d.id})</span>
-                      <span className="block text-[10px] text-text-secondary font-semibold">Rating: {d.ratings} &middot; License: {d.licenseNumber}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {d.status === 'Suspended' ? (
-                      <Button variant="success" size="sm" onClick={() => handleActivateDriver(d.id)} className="text-xs">Validate</Button>
-                    ) : (
-                      <Button variant="danger" size="sm" onClick={() => handleSuspendDriver(d.id)} className="text-xs">Suspend</Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  };
-
-  // Render 5: FINANCIAL ANALYST WORKSPACE (Expenses Oversight)
-  const renderFinancialWorkspace = () => {
-    return (
-      <div className="space-y-6 text-left">
-        {/* Financial KPI stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Total Monthly Costs</span>
-              <span className="text-2xl font-black text-text-main leading-none">INR 185,400</span>
-            </div>
-            <div className="p-2 bg-danger/10 text-danger rounded-lg"><DollarSign size={15} /></div>
-          </div>
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Pending Validations</span>
-              <span className="text-2xl font-black text-text-main leading-none">{financialMetrics.pendingExpenses.length}</span>
-            </div>
-            <div className="p-2 bg-warning/10 text-warning rounded-lg"><Clock size={15} /></div>
-          </div>
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Company Net ROI</span>
-              <span className="text-2xl font-black text-text-main leading-none">12.4 %</span>
-            </div>
-            <div className="p-2 bg-success/15 text-success rounded-lg"><TrendingUp size={15} /></div>
-          </div>
-          <div className="bg-card border border-border p-4 rounded-xl flex items-start justify-between shadow-xs">
-            <div>
-              <span className="block text-[9.5px] font-bold text-text-secondary uppercase tracking-wider">Approved Cost Logs</span>
-              <span className="text-2xl font-black text-text-main leading-none">{financialMetrics.approvedExpensesCount}</span>
-            </div>
-            <div className="p-2 bg-info/10 text-info rounded-lg"><CheckCircle size={15} /></div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Pending Expenses validation */}
-          <Card title="Pending Expenses Validation Console" subtitle="Awaiting validation and authorization from financial controllers">
-            {financialMetrics.pendingExpenses.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-xs font-semibold text-text-secondary">
-                <CheckCircle size={32} className="text-success mb-2" />
-                <span>All company costs validated. Complete!</span>
+        {/* Recent Trips & Recent Notifications Split Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Recent Trips */}
+          <div className="lg:col-span-2">
+            <Card title="Recent Logistics Dispatches" subtitle="Active dispatches status summaries" actions={<Button variant="outline" size="sm" onClick={() => navigate('/trips')} className="text-xs">View All Trips</Button>}>
+              <div className="overflow-x-auto border border-border/85 rounded-xl">
+                <table className="w-full text-xs text-text-secondary text-left border-collapse font-semibold">
+                  <thead>
+                    <tr className="border-b border-border bg-hover/10 text-[9.5px] text-text-secondary/70 uppercase">
+                      <th className="py-2.5 px-3">Trip ID</th>
+                      <th className="py-2.5 px-3">Vehicle</th>
+                      <th className="py-2.5 px-3">Driver</th>
+                      <th className="py-2.5 px-3">Destination</th>
+                      <th className="py-2.5 px-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentTripsList.map(trip => {
+                      const vehicleObj = vehicles.find(v => v.id === trip.vehicleId);
+                      const driverObj = drivers.find(d => d.id === trip.driverId);
+                      return (
+                        <tr key={trip.id} onClick={() => handleRowClick(trip)} className="border-b border-border/60 hover:bg-hover/20 cursor-pointer transition-colors">
+                          <td className="py-2.5 px-3 font-bold text-info">{trip.tripNumber}</td>
+                          <td className="py-2.5 px-3">{vehicleObj?.plateNumber || trip.vehicleId}</td>
+                          <td className="py-2.5 px-3">{driverObj?.name || 'Unassigned'}</td>
+                          <td className="py-2.5 px-3 truncate max-w-[120px]">{trip.destination}</td>
+                          <td className="py-2.5 px-3"><Badge status={trip.status} className="scale-90" /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {financialMetrics.pendingExpenses.map(e => (
-                  <div key={e.id} className="flex items-center justify-between p-3.5 bg-hover/10 border border-border/80 rounded-xl">
-                    <div className="text-xs text-left space-y-0.5">
-                      <span className="block font-bold text-text-main">{e.category} at {e.merchant}</span>
-                      <span className="block text-[10px] text-text-secondary font-semibold">Vehicle: {e.vehicleId} &middot; Cost: INR {e.amount?.toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="success" size="sm" onClick={() => handleApproveExpense(e.id)} className="text-xs px-2.5">Approve</Button>
-                      <Button variant="danger" size="sm" onClick={() => handleRejectExpense(e.id)} className="text-xs px-2.5">Reject</Button>
+            </Card>
+          </div>
+
+          {/* Recent Notifications */}
+          <div className="lg:col-span-1">
+            <Card title="Operations Alerts" subtitle="Inbox notifications registry" actions={<Button variant="outline" size="sm" onClick={() => navigate('/notifications')} className="text-xs">View All</Button>}>
+              <div className="space-y-3.5 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar text-xs font-semibold text-text-secondary">
+                {recentNotifsList.map(n => (
+                  <div key={n.id} className={`flex items-start gap-2.5 pb-3.5 border-b border-border/40 last:border-0 last:pb-0 ${n.unread ? 'text-text-main font-black' : ''}`}>
+                    <div className="p-1 rounded bg-hover/80 shrink-0 mt-0.5"><Bell size={12} className={n.unread ? 'text-info' : 'text-text-secondary'} /></div>
+                    <div>
+                      <p className="leading-tight">{n.title}</p>
+                      <span className="text-[9.5px] text-text-secondary font-semibold block mt-1">{n.time}</span>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-          </Card>
-
-          {/* Top Expensive Vehicles cost center listing */}
-          <Card title="Top Expensive Fleet Vehicles" subtitle="Highest cumulative cost metrics (Maintenance + Refueling + Tolls)">
-            <div className="space-y-3">
-              {financialMetrics.topExpensive.map((v, index) => (
-                <div key={v.id} className="flex items-center justify-between p-3.5 bg-hover/10 border border-border/80 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-text-secondary text-xs w-4">#{index + 1}</span>
-                    <div className="text-xs text-left">
-                      <span className="block font-bold text-text-main">{v.plate}</span>
-                      <span className="block text-[9.5px] text-text-secondary font-semibold">{v.model}</span>
-                    </div>
-                  </div>
-                  <span className="text-xs font-black text-text-main">
-                    INR {v.amount?.toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Card>
+            </Card>
+          </div>
         </div>
+
       </div>
     );
   };
 
-  // Switch workspace loader
+  // 2. FINANCIAL ANALYST DASHBOARD (Fully customized for finance, line/donut/bar charts, transactions ledger)
+  const renderFinancialWorkspace = () => {
+    const pendingApprovalsList = financialMetrics.pendingExpenses.slice(0, 5);
+    // Grab latest 5 approved transactions
+    const approvedTransactions = expenses.filter(e => e.status === 'Approved').slice(0, 5);
+
+    return (
+      <div className="space-y-6 text-left">
+        {/* Greeting Clock Header */}
+        <div className="bg-card border border-border rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div>
+            <h3 className="text-sm font-black text-text-main uppercase tracking-wider">Financial Audit Console</h3>
+            <p className="text-xs text-text-secondary font-semibold mt-1">
+              Active Session: Analyst Account &middot; time: {currentTime.toLocaleTimeString()}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => fetchOperationalData(true)} className="flex items-center gap-1.5 font-bold">
+            <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+            <span>Reload General Ledger</span>
+          </Button>
+        </div>
+
+        {/* Finance KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[9.5px] font-bold text-text-secondary uppercase">Monthly Expenses</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg font-black text-text-main leading-none">INR {financialMetrics.totalExpenses?.toLocaleString()}</span>
+              <DollarSign size={16} className="text-success" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[9.5px] font-bold text-text-secondary uppercase">Fuel Cost</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg font-black text-text-main leading-none">INR {financialMetrics.fuelCostTotal?.toLocaleString()}</span>
+              <Fuel size={16} className="text-info" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[9.5px] font-bold text-text-secondary uppercase">Maintenance Cost</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg font-black text-text-main leading-none">INR {financialMetrics.maintCostTotal?.toLocaleString()}</span>
+              <Wrench size={16} className="text-warning" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[9.5px] font-bold text-text-secondary uppercase">Net Operating Cost</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg font-black text-text-main leading-none">INR {(financialMetrics.totalExpenses + 85000)?.toLocaleString()}</span>
+              <DollarSign size={16} className="text-danger" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[9.5px] font-bold text-text-secondary uppercase">Pending Approvals</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg font-black text-warning leading-none">{financialMetrics.pendingExpenses.length}</span>
+              <AlertCircle size={16} className="text-warning" />
+            </div>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl flex flex-col justify-between h-24">
+            <span className="text-[9.5px] font-bold text-text-secondary uppercase">Budget Utilized</span>
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg font-black text-text-main leading-none">{financialMetrics.budgetUsagePercent}%</span>
+              <TrendingUp size={16} className="text-info" />
+            </div>
+          </div>
+        </div>
+
+        {/* Charts & Graphs block */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* 1. Expense Trend Line Chart (SVG representation) */}
+          <Card title="Monthly Expense Trend" subtitle="Daily cost aggregation tracking">
+            <div className="h-44 flex items-end justify-center relative w-full pt-4">
+              <svg className="w-full h-full" viewBox="0 0 300 100" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--info)" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="var(--info)" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                {/* Area path */}
+                <path d="M 0 90 Q 50 60 100 75 T 200 30 T 300 10 L 300 100 L 0 100 Z" fill="url(#trendGrad)" />
+                {/* Line path */}
+                <path d="M 0 90 Q 50 60 100 75 T 200 30 T 300 10" fill="none" stroke="var(--info)" strokeWidth="2.5" />
+              </svg>
+              {/* labels */}
+              <div className="absolute bottom-1 left-2 text-[9px] font-bold text-text-secondary">Week 1</div>
+              <div className="absolute bottom-1 right-2 text-[9px] font-bold text-text-secondary">Week 4</div>
+            </div>
+          </Card>
+
+          {/* 2. Fuel Cost Breakdown (Simple donut visual representation) */}
+          <Card title="Fuel Cost Breakdown" subtitle="Distribution of refill stations receipts">
+            <div className="h-44 flex items-center justify-center gap-6">
+              {/* Circle donut layout */}
+              <div className="relative h-28 w-28 flex items-center justify-center">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                  {/* Base Circle */}
+                  <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="var(--border)" strokeWidth="3" />
+                  {/* Segment 1: Shell 60% */}
+                  <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="var(--info)" strokeWidth="3.2" strokeDasharray="60 40" strokeDashoffset="0" />
+                  {/* Segment 2: BP 25% */}
+                  <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="var(--success)" strokeWidth="3.2" strokeDasharray="25 75" strokeDashoffset="-60" />
+                </svg>
+                <div className="absolute text-center">
+                  <span className="block text-[9px] uppercase font-bold text-text-secondary">Total Liters</span>
+                  <span className="text-sm font-black text-text-main">4,850 L</span>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-[10px] font-bold text-text-secondary">
+                <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-info" /><span>Shell Refills (60%)</span></div>
+                <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-success" /><span>BP Hubs (25%)</span></div>
+                <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-border" /><span>Others (15%)</span></div>
+              </div>
+            </div>
+          </Card>
+
+          {/* 3. Maintenance Cost Summary (CSS vertical bars representation) */}
+          <Card title="Maintenance Costs" subtitle="Servicing expense classes">
+            <div className="h-44 flex items-end justify-around pb-2 pt-6 w-full text-[9.5px] font-bold text-text-secondary text-center">
+              <div className="space-y-2 flex flex-col items-center">
+                <div className="w-6 bg-info rounded-t-md transition-all" style={{ height: '70px' }} />
+                <span>Breakdowns</span>
+              </div>
+              <div className="space-y-2 flex flex-col items-center">
+                <div className="w-6 bg-warning rounded-t-md transition-all" style={{ height: '110px' }} />
+                <span>Preventive</span>
+              </div>
+              <div className="space-y-2 flex flex-col items-center">
+                <div className="w-6 bg-success rounded-t-md transition-all" style={{ height: '50px' }} />
+                <span>Inspection</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Expense Approvals & Transactions Ledger */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Pending Approvals */}
+          <div className="lg:col-span-1">
+            <Card title="Expense Approvals Awaiting" subtitle="Transactions requiring analyst audit approval" className="h-full">
+              {pendingApprovalsList.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-xs font-semibold text-text-secondary">
+                  <CheckCircle size={32} className="text-success mb-2" />
+                  <span>General ledger is fully audited!</span>
+                </div>
+              ) : (
+                <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                  {pendingApprovalsList.map(e => (
+                    <div key={e.id} className="p-3 bg-hover/10 border border-border/80 rounded-xl space-y-2 text-xs">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="block font-bold text-text-main">{e.category}</span>
+                          <span className="text-[10px] text-text-secondary font-medium">{e.merchant || 'Operations Vendor'} &middot; Vehicle: {e.vehicleId}</span>
+                        </div>
+                        <span className="font-bold text-text-main">INR {e.amount?.toLocaleString()}</span>
+                      </div>
+                      <div className="flex gap-2 justify-end pt-1">
+                        <Button variant="outline" size="sm" onClick={() => handleApproveExpense(e.id)} className="px-2.5 py-1 text-success border-success/30 hover:bg-success/5 flex items-center gap-1 font-bold text-[10px]"><ThumbsUp size={11} /> Approve</Button>
+                        <Button variant="outline" size="sm" onClick={() => handleRejectExpense(e.id)} className="px-2.5 py-1 text-danger border-danger/30 hover:bg-danger/5 flex items-center gap-1 font-bold text-[10px]"><ThumbsDown size={11} /> Reject</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Transactions Ledger */}
+          <div className="lg:col-span-2">
+            <Card title="Approved Transactions Ledger" subtitle="Latest audited expense ledger transactions" actions={<Button variant="outline" size="sm" onClick={() => navigate('/expenses')} className="text-xs">Audit Ledger</Button>}>
+              <div className="overflow-x-auto border border-border/85 rounded-xl">
+                <table className="w-full text-xs text-text-secondary text-left border-collapse font-semibold">
+                  <thead>
+                    <tr className="border-b border-border bg-hover/10 text-[9.5px] text-text-secondary/70 uppercase">
+                      <th className="py-2.5 px-3">Log ID</th>
+                      <th className="py-2.5 px-3">Vehicle</th>
+                      <th className="py-2.5 px-3">Category</th>
+                      <th className="py-2.5 px-3">Amount</th>
+                      <th className="py-2.5 px-3">Audit Date</th>
+                      <th className="py-2.5 px-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {approvedTransactions.map(trans => (
+                      <tr key={trans.id} className="border-b border-border/60 hover:bg-hover/20 transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-info">{trans.id}</td>
+                        <td className="py-2.5 px-3">{trans.vehicleId}</td>
+                        <td className="py-2.5 px-3">{trans.category}</td>
+                        <td className="py-2.5 px-3 text-text-main font-bold">INR {trans.amount?.toLocaleString()}</td>
+                        <td className="py-2.5 px-3">{trans.date}</td>
+                        <td className="py-2.5 px-3"><span className="text-[10px] font-black uppercase text-success bg-success/10 px-2 py-0.5 rounded">Approved</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        </div>
+
+      </div>
+    );
+  };
+
+  // 3. SAFETY OFFICER DASHBOARD
+  const renderSafetyOfficerWorkspace = () => {
+    return renderAdminWorkspace(); // Shares layout structures, filtering specific menus via sidebar clearance levels
+  };
+
+  // 4. DRIVER WORKSPACE (Simplified, Mobile-Friendly)
+  const renderDriverWorkspace = () => {
+    return (
+      <div className="space-y-6 text-left max-w-2xl mx-auto">
+        <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between shadow-sm">
+          <div>
+            <h3 className="text-sm font-black text-text-main uppercase tracking-wider">Pilot Workspace</h3>
+            <p className="text-xs text-text-secondary font-semibold mt-1">Logged in: {currentUser.name}</p>
+          </div>
+          <Badge status="Active" />
+        </div>
+
+        {/* Assigned Vehicle Summary */}
+        <Card title="My Assigned Vehicle" subtitle="Active fleet asset specifications">
+          {driverVehicle ? (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <VehicleImage src={driverVehicle.image} size={50} />
+                <div>
+                  <h4 className="font-bold text-text-main text-xs">{driverVehicle.make} {driverVehicle.model}</h4>
+                  <span className="text-[10.5px] text-text-secondary block font-bold mt-0.5">{driverVehicle.plateNumber} &middot; Class: {driverVehicle.type}</span>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-[11px] font-semibold text-text-secondary">
+                <div><span>Fuel Type:</span> <span className="font-bold text-text-main">{driverVehicle.fuelType}</span></div>
+                <div><span>Odometer:</span> <span className="font-bold text-text-main">{driverVehicle.odometer?.toLocaleString()} km</span></div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-xs text-text-secondary">No vehicle assigned to your session.</div>
+          )}
+        </Card>
+
+        {/* Assigned Trip & Status Actions */}
+        <Card title="Active Route Dispatched" subtitle="Assigned active logistics dispatch logs">
+          {driverTrip ? (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-b border-border/60 pb-3">
+                <div>
+                  <span className="text-[10px] text-info font-black uppercase">{driverTrip.tripNumber}</span>
+                  <p className="font-bold text-text-main text-xs mt-0.5">{driverTrip.origin} &rarr; {driverTrip.destination}</p>
+                </div>
+                <Badge status={driverTripStatus} />
+              </div>
+
+              {/* Status Toggles */}
+              <div className="space-y-2">
+                <label className="text-[10px] text-text-secondary font-bold uppercase block">Update Trip State</label>
+                <div className="flex gap-2 flex-wrap">
+                  {['Scheduled', 'Active', 'Paused', 'Completed'].map(state => (
+                    <button
+                      key={state}
+                      onClick={() => {
+                        setDriverTripStatus(state);
+                        showToast.success(`Trip status updated locally to: ${state}`);
+                      }}
+                      className={`px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                        driverTripStatus === state
+                          ? 'bg-info text-white'
+                          : 'bg-hover/80 text-text-secondary hover:bg-hover'
+                      }`}
+                    >
+                      {state}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Proof of delivery & refuels */}
+              <div className="flex gap-3">
+                <Button variant="outline" size="sm" onClick={() => setIsFuelModalOpen(true)} className="flex-1 font-bold"><Fuel size={13} className="mr-1.5" /> Log Fuel Refill</Button>
+                <Button variant="outline" size="sm" onClick={() => setIsReportIssueModalOpen(true)} className="flex-1 font-bold text-danger border-danger/25 hover:bg-danger/5"><AlertTriangle size={13} className="mr-1.5" /> Report Breakdown</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-xs text-text-secondary">No active dispatch schedules recorded.</div>
+          )}
+        </Card>
+
+        {/* Active Fuel Log Modal */}
+        {isFuelModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <div className="bg-card border border-border rounded-xl p-5 w-full max-w-xs space-y-4">
+              <div className="text-left">
+                <h6 className="font-bold text-text-main uppercase tracking-wider text-xs">Record Fuel Log</h6>
+                <p className="text-[10px] text-text-secondary mt-0.5">Input fuel liters and cost metrics</p>
+              </div>
+              <form onSubmit={handleDriverFuelLogSubmit} className="space-y-3 text-left">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-text-secondary font-bold uppercase">Liters Refueled</label>
+                  <input type="number" required value={fuelLiters} onChange={(e) => setFuelLiters(e.target.value)} className="w-full px-3 py-1.5 bg-background text-text-main border border-border rounded-lg text-xs" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-text-secondary font-bold uppercase">Cost (INR)</label>
+                  <input type="number" required value={fuelCost} onChange={(e) => setFuelCost(e.target.value)} className="w-full px-3 py-1.5 bg-background text-text-main border border-border rounded-lg text-xs" />
+                </div>
+                <div className="flex gap-2 text-xs pt-1">
+                  <Button variant="outline" type="button" onClick={() => setIsFuelModalOpen(false)} className="w-1/2 text-xs">Cancel</Button>
+                  <Button variant="primary" type="submit" className="w-1/2 text-xs">Save</Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Report Breakdown Modal */}
+        {isReportIssueModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <div className="bg-card border border-border rounded-xl p-5 w-full max-w-xs space-y-4">
+              <div className="text-left">
+                <h6 className="font-bold text-text-main uppercase tracking-wider text-xs">Report Breakdown / Incident</h6>
+                <p className="text-[10px] text-text-secondary mt-0.5">Details will dispatch warning flags to mechanics</p>
+              </div>
+              <form onSubmit={handleDriverIssueReportSubmit} className="space-y-3 text-left">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-text-secondary font-bold uppercase">Describe Incident Details</label>
+                  <textarea rows={3} required value={reportedIssueDesc} onChange={(e) => setReportedIssueDesc(e.target.value)} className="w-full px-3 py-1.5 bg-background text-text-main border border-border rounded-lg text-xs" placeholder="e.g. Engine coolant temp warning..." />
+                </div>
+                <div className="flex gap-2 text-xs pt-1">
+                  <Button variant="outline" type="button" onClick={() => setIsReportIssueModalOpen(false)} className="w-1/2 text-xs">Cancel</Button>
+                  <Button variant="danger" type="submit" className="w-1/2 text-xs">Submit Incident</Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Switch Dashboard view loader
   const renderRoleDashboard = () => {
     switch (currentUser.role) {
       case ROLES.ADMIN:
-        return renderAdminWorkspace();
       case ROLES.FLEET_MANAGER:
         return renderFleetManagerWorkspace();
       case ROLES.DRIVER:
@@ -823,7 +852,7 @@ const Dashboard = () => {
       case ROLES.FINANCIAL_ANALYST:
         return renderFinancialWorkspace();
       default:
-        return renderAdminWorkspace();
+        return renderFleetManagerWorkspace();
     }
   };
 
@@ -842,6 +871,15 @@ const Dashboard = () => {
         renderRoleDashboard()
       )}
 
+      {/* Confirmation Modal */}
+      <ConfirmationDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+      />
+
       {/* Trip Details drawer */}
       {selectedTrip && (
         <Drawer
@@ -858,59 +896,19 @@ const Dashboard = () => {
 
             <div className="space-y-3.5">
               <div>
-                <span className="block text-[10px] text-text-secondary font-bold uppercase tracking-wider mb-0.5">Route Path</span>
-                <span className="text-text-main font-black block text-sm">
-                  {selectedTrip.origin} &rarr; {selectedTrip.destination}
-                </span>
+                <span className="block text-[9px] uppercase font-bold text-text-secondary">Trip Number</span>
+                <span className="text-text-main font-bold block mt-0.5">{selectedTrip.tripNumber}</span>
               </div>
-              
-              {/* Vehicle Info Box */}
-              <div className="flex items-center gap-3 border border-border/40 p-3 rounded-xl bg-hover/10">
-                <VehicleImage src={vehicles.find(v => v.id === selectedTrip.vehicleId)?.image} size={48} />
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="block text-[10px] text-text-secondary font-bold uppercase">Vehicle</span>
-                  <span className="block text-xs font-bold text-text-main">
-                    {vehicles.find(v => v.id === selectedTrip.vehicleId)?.plateNumber || selectedTrip.vehicleId}
-                  </span>
-                  <span className="block text-[10px] text-text-secondary">
-                    {vehicles.find(v => v.id === selectedTrip.vehicleId)?.model || 'Unknown Model'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Driver Info Box */}
-              <div className="flex items-center gap-3 border border-border/40 p-3 rounded-xl bg-hover/10">
-                <DriverAvatar 
-                  name={drivers.find(d => d.id === selectedTrip.driverId)?.name || 'Unassigned'} 
-                  avatarUrl={drivers.find(d => d.id === selectedTrip.driverId)?.avatar} 
-                  size={48} 
-                />
-                <div>
-                  <span className="block text-[10px] text-text-secondary font-bold uppercase">Driver</span>
-                  <span className="block text-xs font-bold text-text-main">
-                    {drivers.find(d => d.id === selectedTrip.driverId)?.name || 'Unassigned'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 border border-border/40 p-3 rounded-xl bg-hover/10 font-bold text-text-secondary">
-                <div>
-                  <span className="block text-[10px] uppercase">Cargo Weight</span>
-                  <span className="text-text-main font-bold">{selectedTrip.cargoWeight || 'Standard Cargo'}</span>
+                  <span className="block text-[9px] uppercase font-bold text-text-secondary">Origin Hub</span>
+                  <span className="text-text-main font-bold block mt-0.5">{selectedTrip.origin}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase">Distance</span>
-                  <span className="text-text-main font-bold">{selectedTrip.distance} km</span>
+                  <span className="block text-[9px] uppercase font-bold text-text-secondary">Destination Destination</span>
+                  <span className="text-text-main font-bold block mt-0.5">{selectedTrip.destination}</span>
                 </div>
               </div>
-            </div>
-
-            <hr className="border-border/60" />
-
-            <div className="flex items-center gap-2">
-              <Button variant="primary" onClick={() => { setIsTripDrawerOpen(false); navigate('/trips'); }} className="w-full text-xs">
-                Go to Trips Module
-              </Button>
             </div>
           </div>
         </Drawer>

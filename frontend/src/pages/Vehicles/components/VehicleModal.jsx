@@ -170,8 +170,8 @@ const VehicleModal = ({ isOpen, onClose, vehicleId, onSave, vehiclesList = [] })
       }
       onSave();
       onClose();
-    } catch {
-      showToast.error("Operation failed");
+    } catch (err) {
+      showToast.error(err.message || "Operation failed");
     } finally {
       setIsSaving(false);
     }

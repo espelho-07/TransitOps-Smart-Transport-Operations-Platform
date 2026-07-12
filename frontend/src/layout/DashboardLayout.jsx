@@ -7,20 +7,61 @@ import Breadcrumb from '../components/Breadcrumb';
 import PageHeader from '../components/PageHeader';
 import PageContainer from '../components/PageContainer';
 import { useUI } from '../context/UIContext';
+import { useAuth } from '../context/AuthContext';
 
 const DashboardLayout = () => {
   const location = useLocation();
   const { setIsMobileDrawerOpen } = useUI();
+  const { currentUser } = useAuth();
+
+  // Close mobile drawer whenever route changes
+  useEffect(() => {
+    setIsMobileDrawerOpen(false);
+  }, [location.pathname, setIsMobileDrawerOpen]);
 
   const token = localStorage.getItem('token');
   if (!token) {
     return <Navigate to="/login" replace />;
   }
 
-  // Close mobile drawer whenever route changes
-  useEffect(() => {
-    setIsMobileDrawerOpen(false);
-  }, [location.pathname, setIsMobileDrawerOpen]);
+  // Role-based path guarding
+  const isPathAllowed = (path, role) => {
+    const cleanPath = path.toLowerCase().replace(/\/$/, '');
+    
+    // Admin has access to all routes
+    if (role === 'Admin') return true;
+
+    // Direct bypass for standard utility paths
+    if (cleanPath === '/access-denied' || cleanPath === '/profile' || cleanPath === '/notifications' || cleanPath === '/help' || cleanPath === '/dashboard') {
+      return true;
+    }
+
+    if (role === 'Fleet Manager') {
+      const forbidden = ['/settings', '/users', '/invite-user'];
+      return !forbidden.some(p => cleanPath.startsWith(p));
+    }
+
+    if (role === 'Driver') {
+      const allowed = ['/dashboard', '/vehicles', '/trips', '/fuel', '/notifications', '/help', '/profile', '/access-denied'];
+      return allowed.some(p => cleanPath === p);
+    }
+
+    if (role === 'Safety Officer') {
+      const allowed = ['/dashboard', '/vehicles', '/drivers', '/trips', '/reports', '/notifications', '/help', '/profile', '/audit-logs', '/access-denied'];
+      return allowed.some(p => cleanPath === p);
+    }
+
+    if (role === 'Financial Analyst') {
+      const allowed = ['/dashboard', '/fuel', '/expenses', '/reports', '/notifications', '/help', '/profile', '/access-denied'];
+      return allowed.some(p => cleanPath === p);
+    }
+
+    return true;
+  };
+
+  if (currentUser && !isPathAllowed(location.pathname, currentUser.role)) {
+    return <Navigate to="/access-denied" replace />;
+  }
 
 
   const getPageMeta = () => {
@@ -104,6 +145,36 @@ const DashboardLayout = () => {
         return {
           title: 'Operator Profile',
           subtitle: 'Manage your platform details, credentials, and settings logs.'
+        };
+      case 'users':
+        return {
+          title: 'User Management',
+          subtitle: 'Manage organization users, console access credentials, and security roles.'
+        };
+      case 'audit-logs':
+        return {
+          title: 'System Audit Logs',
+          subtitle: 'Review full history of operations actions logged on the TransitOps console.'
+        };
+      case 'help':
+        return {
+          title: 'Help Center',
+          subtitle: 'Query user guides, FAQs, and submit console technical tickets.'
+        };
+      case 'notifications':
+        return {
+          title: 'Notifications Center',
+          subtitle: 'View, mark, and manage operational alerts in your inbox.'
+        };
+      case 'invite-user':
+        return {
+          title: 'Invite Staff User',
+          subtitle: 'Dispatch console join invitation links to organization personnel.'
+        };
+      case 'access-denied':
+        return {
+          title: 'Access Restricted',
+          subtitle: 'Security clearance validation failed.'
         };
       default:
         break;

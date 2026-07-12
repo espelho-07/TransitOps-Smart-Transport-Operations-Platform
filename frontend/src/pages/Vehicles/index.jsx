@@ -55,8 +55,8 @@ const Vehicles = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Vehicles list state
-  const [vehicles, setVehicles] = useState([]);
-  const [drivers, setDrivers] = useState([]);
+  const [vehicles, setVehicles] = useState(vehicleService.getAll());
+  const [drivers, setDrivers] = useState(driverService.getAll());
   const [loading, setLoading] = useState(false);
 
   // Toolbar & filter configurations
@@ -77,10 +77,14 @@ const Vehicles = () => {
   useEffect(() => {
     if (searchParams.get('add') === 'true') {
       setSearchParams({}, { replace: true });
-      setSelectedVehicleId(null);
-      setIsModalOpen(true);
+      if (isManager) {
+        setSelectedVehicleId(null);
+        setIsModalOpen(true);
+      } else {
+        showToast.error("Security audit failed. Manager credentials required.");
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, isManager]);
 
   const loadVehicles = async () => {
     setLoading(true);
@@ -212,14 +216,14 @@ const Vehicles = () => {
     
     const headers = ['Registration Code', 'Brand', 'Vehicle Model', 'Type', 'Capacity', 'Odometer', 'Status', 'Fuel Level'];
     const rows = filteredVehicles.map(v => [
-      v.plateNumber,
+      v.registrationNo,
       v.make,
       v.model,
       v.type,
       v.carrierCap,
       v.odometer,
       v.status,
-      v.fuelLevel
+      v.fuel
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -249,7 +253,7 @@ const Vehicles = () => {
       render: (_, row) => <VehicleImage src={row.image} alt={row.model} size={40} className="rounded-lg border border-border/80 object-cover" />
     },
     {
-      key: 'plateNumber',
+      key: 'registrationNo',
       label: 'Registration Number',
       sortable: true,
       render: (val, row) => (
@@ -284,26 +288,17 @@ const Vehicles = () => {
       render: (val) => <span className="text-xs text-text-main font-semibold">{val}</span>
     },
     {
-      key: 'carrierCap',
-      label: 'Capacity',
-      sortable: true,
-      render: (val) => <span className="text-xs font-semibold text-text-secondary">{val}</span>
-    },
-    {
-      key: 'assignedDriverId',
+      key: 'driverName',
       label: 'Assigned Driver',
       sortable: true,
-      render: (val) => {
-        const driverObj = drivers.find(d => d.id === val);
-        return (
-          <div className="flex items-center gap-2">
-            <DriverAvatar name={driverObj?.name || 'Unassigned'} avatarUrl={driverObj?.avatar} size={28} />
-            <span className="text-xs text-text-main font-bold">
-              {driverObj ? driverObj.name : <span className="text-text-secondary font-semibold">Unassigned</span>}
-            </span>
-          </div>
-        );
-      }
+      render: (val, row) => (
+        <div className="flex items-center gap-2">
+          <DriverAvatar name={val || 'Unassigned'} avatarUrl={row.driverImage} size={28} />
+          <span className="text-xs text-text-main font-bold">
+            {val || <span className="text-text-secondary font-semibold">Unassigned</span>}
+          </span>
+        </div>
+      )
     },
     {
       key: 'status',
@@ -312,7 +307,7 @@ const Vehicles = () => {
       render: (val) => <Badge status={val} />
     },
     {
-      key: 'fuelLevel',
+      key: 'fuel',
       label: 'Fuel %',
       sortable: true,
       render: (val) => (
@@ -328,7 +323,7 @@ const Vehicles = () => {
       )
     },
     {
-      key: 'lastServiceDate',
+      key: 'lastMaintenanceDate',
       label: 'Last Service',
       sortable: true,
       render: (val) => <span className="text-xs font-semibold text-text-secondary">{val || 'N/A'}</span>
@@ -585,6 +580,7 @@ const Vehicles = () => {
               isOpen={isDrawerOpen}
               onClose={() => setIsDrawerOpen(false)}
               vehicleId={drawerVehicleId}
+              vehicle={vehicles.find(v => v.id === drawerVehicleId)}
               onViewProfile={handleViewDetails}
               onEditProfile={handleEditDetails}
               onUpdate={loadVehicles}

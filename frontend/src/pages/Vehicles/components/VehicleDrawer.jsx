@@ -22,7 +22,7 @@ import Drawer from '../../../components/ui/Drawer';
 import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
 import Input from '../../../components/ui/Input';
-import Tabs from '../../../components/ui/Tabs';
+import EntityDetailLayout from '../../../components/ui/EntityDetailLayout';
 import { driverService } from '../../../services/driverService';
 import { vehicleService } from '../../../services/vehicleService';
 import { tripService } from '../../../services/tripService';
@@ -32,28 +32,25 @@ import { VehicleImage, DriverAvatar } from '../../../components/ui/FallbackImage
 import VehicleHistory from './VehicleHistory';
 import { useAuth } from '../../../context/AuthContext';
 
-/**
- * High-fidelity right drawer (420px) displaying complete vehicle specs,
- * compliance flags, latest trips, fuel economies, maintenance schedules, and activity timelines.
- */
 const VehicleDrawer = ({
   isOpen,
   onClose,
   vehicleId,
+  vehicle: propVehicle,
   onViewProfile,
   onEditProfile,
   onUpdate
 }) => {
-  const { currentUser } = useAuth ? useAuth() : { currentUser: { role: 'Admin' } }; // Fail-safe fallback if useAuth is unimported
+  const { currentUser } = useAuth();
   const isManager = currentUser?.role === 'Admin' || currentUser?.role === 'Fleet Manager';
 
   // Drawer local states
-  const [vehicle, setVehicle] = useState(null);
+  const [vehicleState, setVehicleState] = useState(null);
+  const vehicle = propVehicle || vehicleState;
   const [loading, setLoading] = useState(false);
   const [availableDrivers, setAvailableDrivers] = useState([]);
   const [trips, setTrips] = useState([]);
   const [maintenance, setMaintenance] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview');
 
   // Quick edit config states
   const [odometer, setOdometer] = useState('');
@@ -70,28 +67,41 @@ const VehicleDrawer = ({
 
   // Load details
   useEffect(() => {
-    if (isOpen && vehicleId) {
-      loadVehicleData();
+    if (isOpen) {
+      if (propVehicle) {
+        setOdometer(propVehicle.odometer || '');
+        setStatus(propVehicle.status || '');
+        setDriverId(propVehicle.assignedDriverId || '');
+        loadRelatedData(propVehicle);
+      } else if (vehicleId) {
+        loadVehicleData();
+      }
       loadDrivers();
     }
-  }, [isOpen, vehicleId]);
+  }, [isOpen, vehicleId, propVehicle]);
+
+  const loadRelatedData = async (data) => {
+    try {
+      const allTrips = await tripService.getAll();
+      setTrips(allTrips.filter(t => t.vehicleId === data.id));
+
+      const allMaint = await maintenanceService.getAll();
+      setMaintenance(allMaint.filter(m => m.vehicleId === data.id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadVehicleData = async () => {
     setLoading(true);
     try {
       const data = await vehicleService.getById(vehicleId);
-      setVehicle(data);
+      setVehicleState(data);
       setOdometer(data.odometer || '');
       setStatus(data.status || '');
       setDriverId(data.assignedDriverId || '');
 
-      // Load related dispatches
-      const allTrips = await tripService.getAll();
-      setTrips(allTrips.filter(t => t.vehicleId === data.id));
-
-      // Load related maintenance logs
-      const allMaint = await maintenanceService.getAll();
-      setMaintenance(allMaint.filter(m => m.vehicleId === data.id));
+      await loadRelatedData(data);
     } catch {
       showToast.error("Failed to load vehicle parameters");
     } finally {
@@ -101,58 +111,57 @@ const VehicleDrawer = ({
 
   const loadDrivers = async () => {
     try {
-      const data = await driverService.getAll();
-      // Filter out suspended drivers
-      setAvailableDrivers(data.filter(d => d.status !== 'Suspended'));
+      const allDrivers = await driverService.getAll();
+      setAvailableDrivers(allDrivers);
     } catch {
-      console.error("Failed to query operator profiles");
+      console.error("Failed to load drivers for assignment");
     }
   };
 
-  // Actions
   const handleSaveOdometer = async () => {
-    if (odometer === '' || Number(odometer) < 0) {
-      showToast.error('Enter a valid non-negative mileage reading');
+    if (!odometer || isNaN(odometer)) {
+      showToast.error("Please enter a valid mileage numeric log");
       return;
     }
     setSavingOdometer(true);
     try {
-      const updated = await vehicleService.update(vehicleId, { odometer: Number(odometer) });
+      const updated = await vehicleService.updateOdometer(vehicle.id, Number(odometer));
       setVehicle(updated);
-      showToast.success('Odometer reading updated');
-      onUpdate && onUpdate();
+      showToast.success("Mileage odometer logs updated successfully!");
+      if (onUpdate) onUpdate();
     } catch {
-      showToast.error('Odometer update failed');
+      showToast.error("Failed to update odometer");
     } finally {
       setSavingOdometer(false);
     }
   };
 
-  const handleStatusChange = async (newStatus) => {
+  const handleSaveStatus = async (newStatus) => {
     setSavingStatus(true);
-    setStatus(newStatus);
     try {
-      const updated = await vehicleService.update(vehicleId, { status: newStatus });
+      const updated = await vehicleService.updateStatus(vehicle.id, newStatus);
       setVehicle(updated);
-      showToast.success(`Operational status changed to ${newStatus}`);
-      onUpdate && onUpdate();
+      setStatus(newStatus);
+      showToast.success(`Vehicle status changed to: ${newStatus}`);
+      if (onUpdate) onUpdate();
     } catch {
-      showToast.error('Status transition failed');
+      showToast.error("Failed to change vehicle status");
     } finally {
       setSavingStatus(false);
     }
   };
 
-  const handleDriverChange = async (newDriverId) => {
+  const handleAssignDriver = async (e) => {
+    const selectedDriverId = e.target.value;
+    setDriverId(selectedDriverId);
     setSavingDriver(true);
-    setDriverId(newDriverId);
     try {
-      const updated = await vehicleService.update(vehicleId, { assignedDriverId: newDriverId || null });
+      const updated = await vehicleService.assignDriver(vehicle.id, selectedDriverId || null);
       setVehicle(updated);
-      showToast.success(newDriverId ? 'Custodian driver assigned successfully' : 'Driver unassigned');
-      onUpdate && onUpdate();
+      showToast.success(selectedDriverId ? "New custodian driver pilot assigned!" : "Custodian driver pilot released");
+      if (onUpdate) onUpdate();
     } catch {
-      showToast.error('Custodian assignment failed');
+      showToast.error("Failed to assign driver pilot");
     } finally {
       setSavingDriver(false);
     }
@@ -160,79 +169,286 @@ const VehicleDrawer = ({
 
   const handleArchive = async () => {
     try {
-      const updated = await vehicleService.archive(vehicleId);
-      setVehicle(updated);
-      showToast.success(updated.isArchived ? 'Asset archived successfully' : 'Asset restored successfully');
-      onUpdate && onUpdate();
+      if (vehicle.isArchived) {
+        await vehicleService.restore(vehicle.id);
+        showToast.success("Vehicle restored to active registry");
+      } else {
+        await vehicleService.archive(vehicle.id);
+        showToast.success("Vehicle archived in registry");
+      }
+      onClose();
+      if (onUpdate) onUpdate();
     } catch {
-      showToast.error('Archive action failed');
+      showToast.error("Failed to toggle archive status");
     }
   };
 
   const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this vehicle asset? This action is permanent.')) {
+    if (window.confirm("Are you sure you want to delete this vehicle permanently?")) {
       try {
-        await vehicleService.delete(vehicleId);
-        showToast.success('Vehicle asset deleted successfully');
-        onUpdate && onUpdate();
+        await vehicleService.delete(vehicle.id);
+        showToast.success("Vehicle asset deleted permanently");
         onClose();
-      } catch (err) {
-        showToast.error(err.message || 'Deletion failed');
+        if (onUpdate) onUpdate();
+      } catch {
+        showToast.error("Failed to delete vehicle");
       }
     }
   };
 
-  const handleFuelSubmit = (e) => {
+  const handleFuelSubmit = async (e) => {
     e.preventDefault();
-    if (!fuelLiters || !fuelCost) return;
-    showToast.success(`Logged refuel: ${fuelLiters}L for INR ${fuelCost}`);
+    if (!fuelLiters || !fuelCost) {
+      showToast.error("Please fill in both fields");
+      return;
+    }
+    showToast.success("Fuel log simulated successfully");
     setShowFuelLogModal(false);
-    setFuelLiters('');
     setFuelCost('');
+    setFuelLiters('');
   };
 
-  // Compute Expirations Checkbox Grid Values
+  // Document Badge Helpers
+  const docBadge = (statusVal) => {
+    if (statusVal === 'valid' || statusVal === true) {
+      return <span className="text-[10px] font-black text-success uppercase">Valid</span>;
+    }
+    if (statusVal === 'expiring') {
+      return <span className="text-[10px] font-black text-warning uppercase">Expiring</span>;
+    }
+    return <span className="text-[10px] font-black text-danger uppercase">Expired</span>;
+  };
+
   const complianceStatus = useMemo(() => {
-    if (!vehicle) return {};
-    const now = new Date();
-    const thirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-    const getStatus = (dateStr) => {
-      if (!dateStr) return 'Missing';
-      const dateVal = new Date(dateStr);
-      if (dateVal < now) return 'Expired';
-      if (dateVal <= thirtyDays) return 'Expiring';
-      return 'Valid';
-    };
-
+    if (!vehicle) return { insurance: 'expired', permit: 'expired', fitness: 'expired', puc: 'expired' };
+    
+    // Convert text dates into simple evaluations
     return {
-      insurance: getStatus(vehicle.insuranceExpiry),
-      fitness: getStatus(vehicle.fitnessExpiry),
-      permit: getStatus(vehicle.permitExpiry),
-      puc: getStatus(vehicle.pucExpiry)
+      insurance: vehicle.insuranceExpiry ? (new Date(vehicle.insuranceExpiry) > new Date() ? 'valid' : 'expired') : 'expired',
+      permit: vehicle.permitExpiry ? (new Date(vehicle.permitExpiry) > new Date() ? 'valid' : 'expired') : 'expired',
+      fitness: vehicle.fitnessExpiry ? (new Date(vehicle.fitnessExpiry) > new Date() ? 'valid' : 'expired') : 'expired',
+      puc: vehicle.pucExpiry ? (new Date(vehicle.pucExpiry) > new Date() ? 'valid' : 'expired') : 'expired',
     };
   }, [vehicle]);
 
-  const docBadge = (status) => {
-    if (status === 'Valid') return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-success/15 border border-success/35 text-success uppercase">Valid</span>;
-    if (status === 'Expiring') return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-warning/15 border border-warning/35 text-warning uppercase animate-pulse">Expiring</span>;
-    return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger/15 border border-danger/35 text-danger uppercase">Expired</span>;
-  };
-
-  const tabOptions = [
-    { id: 'overview', label: 'Specs & Compliance' },
-    { id: 'logs', label: 'Trips & Servicing' },
-    { id: 'timeline', label: 'Event Timeline' }
-  ];
-
   if (!isOpen) return null;
+
+  // Overview tab Content
+  const overviewContent = vehicle && (
+    <div className="space-y-4.5 text-xs font-semibold text-text-secondary">
+      {/* Driver custodianship card */}
+      <div className="flex items-center justify-between border border-border p-3.5 rounded-xl bg-hover/5">
+        <div className="flex items-center gap-3">
+          <DriverAvatar 
+            name={availableDrivers.find(d => d.id === vehicle.assignedDriverId)?.name || 'Unassigned'} 
+            avatarUrl={availableDrivers.find(d => d.id === vehicle.assignedDriverId)?.avatar} 
+            size={40} 
+          />
+          <div className="text-left">
+            <span className="block text-[9px] font-black text-text-secondary uppercase tracking-wider">Custodian</span>
+            <span className="text-text-main font-bold block mt-0.5">
+              {availableDrivers.find(d => d.id === vehicle.assignedDriverId)?.name || 'Unassigned'}
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="block text-[9px] font-black text-text-secondary uppercase tracking-wider">Active Trip</span>
+          <span className="text-text-main font-bold block mt-0.5 text-info">
+            {vehicle.assignedTripId ? vehicle.assignedTripId : 'None'}
+          </span>
+        </div>
+      </div>
+
+      {/* General Specifications Grid */}
+      <div className="grid grid-cols-2 gap-3 text-left">
+        <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
+          <span className="block text-[9px] uppercase font-bold">Class / Type</span>
+          <span className="font-bold text-text-main block mt-0.5">{vehicle.type}</span>
+        </div>
+        <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
+          <span className="block text-[9px] uppercase font-bold">Capacity</span>
+          <span className="font-bold text-text-main block mt-0.5">{vehicle.carrierCap}</span>
+        </div>
+        <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
+          <span className="block text-[9px] uppercase font-bold">Fuel Type</span>
+          <span className="font-bold text-text-main block mt-0.5">{vehicle.fuelType}</span>
+        </div>
+        <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
+          <span className="block text-[9px] uppercase font-bold">Odometer (km)</span>
+          <span className="font-bold text-text-main block mt-0.5">{vehicle.odometer?.toLocaleString()} km</span>
+        </div>
+      </div>
+
+      {/* Compliance Policy Watch Checklist */}
+      <div className="border border-border p-3.5 rounded-xl space-y-3 bg-hover/10 text-left">
+        <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Regulatory Compliance</h5>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+            <span className="text-[10px]">Insurance</span>
+            {docBadge(complianceStatus.insurance)}
+          </div>
+          <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+            <span className="text-[10px]">Permit</span>
+            {docBadge(complianceStatus.permit)}
+          </div>
+          <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+            <span className="text-[10px]">Fitness Cert</span>
+            {docBadge(complianceStatus.fitness)}
+          </div>
+          <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+            <span className="text-[10px]">PUC Emission</span>
+            {docBadge(complianceStatus.puc)}
+          </div>
+        </div>
+      </div>
+
+      {/* Configuration Controls (Only for Managers) */}
+      {isManager && (
+        <div className="border border-border p-3.5 rounded-xl space-y-3 text-left bg-hover/5">
+          <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Configuration Controls</h5>
+          
+          {/* Inline Odometer Edit */}
+          <div className="space-y-1">
+            <label className="text-[9.5px] text-text-secondary font-bold uppercase">Update Mileage (km)</label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                value={odometer}
+                onChange={(e) => setOdometer(e.target.value)}
+                className="flex-1 text-xs"
+              />
+              <Button
+                variant="outline"
+                onClick={handleSaveOdometer}
+                isLoading={savingOdometer}
+                className="px-3 text-xs font-bold"
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+
+          {/* Quick status controls */}
+          <div className="space-y-1.5">
+            <label className="text-[9.5px] text-text-secondary font-bold uppercase block">Change Status Flag</label>
+            <div className="flex gap-2 flex-wrap">
+              {['Available', 'Maintenance', 'Active'].map(statusName => (
+                <button
+                  key={statusName}
+                  onClick={() => handleSaveStatus(statusName)}
+                  disabled={savingStatus}
+                  className={`px-3 py-1.5 rounded-lg text-[9.5px] font-black uppercase transition-all ${
+                    vehicle.status === statusName
+                      ? 'bg-info text-white font-black'
+                      : 'bg-hover/80 text-text-secondary hover:text-text-main hover:bg-hover'
+                  }`}
+                >
+                  {statusName}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Custodian Driver assign */}
+          <div className="space-y-1">
+            <label className="text-[9.5px] text-text-secondary font-bold uppercase">Re-assign Custodian Pilot</label>
+            <select
+              value={driverId}
+              onChange={handleAssignDriver}
+              disabled={savingDriver}
+              className="bg-background text-text-main border border-border rounded-lg px-2.5 py-1.5 text-xs w-full focus:outline-none focus:border-info"
+            >
+              <option value="">Unassigned</option>
+              {availableDrivers.map(d => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.status})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Trips & Maintenance tab Content
+  const logsContent = (
+    <div className="space-y-4 text-xs text-left">
+      {/* Latest dispatches */}
+      <div className="space-y-2">
+        <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Recent Logistics Dispatches</h5>
+        {trips.length === 0 ? (
+          <div className="text-center py-4 bg-hover/5 border border-border/40 rounded-lg text-text-secondary font-semibold">No dispatches logged for this asset.</div>
+        ) : (
+          <div className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-card">
+            {trips.slice(0, 3).map(t => (
+              <div key={t.id} className="p-2.5 flex items-center justify-between font-semibold">
+                <div className="space-y-0.5">
+                  <span className="block text-[10px] text-info font-bold">{t.tripNumber}</span>
+                  <span className="block text-[10px] text-text-main leading-none">{t.origin} &rarr; {t.destination}</span>
+                </div>
+                <Badge status={t.status} className="scale-90" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Servicing schedules */}
+      <div className="space-y-2">
+        <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Preventive Maintenance</h5>
+        <div className="grid grid-cols-2 gap-3 border border-border p-3 rounded-lg bg-hover/5 font-semibold text-text-secondary">
+          <div>
+            <span className="block text-[9px] uppercase">Last Service</span>
+            <span className="text-text-main font-bold mt-0.5 block">{vehicle?.lastServiceDate || 'N/A'}</span>
+          </div>
+          <div>
+            <span className="block text-[9px] uppercase">Next Service</span>
+            <span className="text-text-main font-bold mt-0.5 block">{vehicle?.nextServiceDate || 'N/A'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Refueling logs summary */}
+      <div className="space-y-2">
+        <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Fuel Statistics</h5>
+        <div className="grid grid-cols-3 gap-3 font-semibold text-text-secondary text-center">
+          <div className="border border-border p-2 rounded bg-hover/10">
+            <span className="block text-[9px] uppercase">Fuel Econ</span>
+            <span className="text-text-main font-bold text-xs mt-0.5 block">8.2 km/l</span>
+          </div>
+          <div className="border border-border p-2 rounded bg-hover/10">
+            <span className="block text-[9px] uppercase">Liters Logged</span>
+            <span className="text-text-main font-bold text-xs mt-0.5 block">140 L</span>
+          </div>
+          <div className="border border-border p-2 rounded bg-hover/10">
+            <span className="block text-[9px] uppercase">Fuel Cost</span>
+            <span className="text-text-main font-bold text-xs mt-0.5 block">INR 12.6k</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Timeline tab Content
+  const timelineContent = vehicle && (
+    <div className="py-2.5 max-h-[350px] overflow-y-auto pr-1">
+      <VehicleHistory vehicle={vehicle} />
+    </div>
+  );
+
+  const detailTabs = [
+    { id: 'overview', label: 'Specs & Compliance', content: overviewContent },
+    { id: 'logs', label: 'Trips & Servicing', content: logsContent },
+    { id: 'timeline', label: 'Event Timeline', content: timelineContent }
+  ];
 
   return (
     <Drawer
       isOpen={isOpen}
       onClose={onClose}
       title={vehicle ? `Quick Audit: ${vehicle.plateNumber}` : 'Vehicle Parameters'}
-      className="w-full sm:w-[420px]"
+      className="w-full sm:w-[450px]"
     >
       {loading || !vehicle ? (
         <div className="flex flex-col items-center justify-center py-36 space-y-3">
@@ -240,332 +456,61 @@ const VehicleDrawer = ({
           <span className="text-xs text-text-secondary font-bold uppercase tracking-wider">Syncing details...</span>
         </div>
       ) : (
-        <div className="space-y-5 h-full flex flex-col justify-between">
-          
-          {/* Scrollable Main body wrapper */}
-          <div className="flex-1 overflow-y-auto space-y-5 custom-scrollbar pr-1">
-            
-            {/* Header profile cards */}
-            <div className="flex items-center gap-4 bg-hover/10 p-4 border border-border/80 rounded-xl">
-              <button 
-                type="button" 
-                onClick={() => onViewProfile(vehicle.id)}
-                className="cursor-pointer hover:opacity-85 transition-opacity"
-                title="View full specs"
-              >
-                <VehicleImage src={vehicle.image} alt={vehicle.plateNumber} size={80} />
-              </button>
-              <div className="min-w-0 text-left space-y-1">
-                <h4 className="text-xs font-black text-text-main leading-tight truncate">
-                  {vehicle.make} {vehicle.model}
-                </h4>
-                <span className="block text-[11px] font-black text-text-secondary uppercase">
-                  {vehicle.plateNumber}
-                </span>
-                <Badge status={vehicle.status} className="mt-1" />
-              </div>
-            </div>
-
-            {/* Custom Tab Panel bar */}
-            <Tabs tabs={tabOptions} activeTab={activeTab} onTabChange={setActiveTab} className="scale-95" />
-
-            {/* Tab Panels */}
-            <div className="space-y-4">
-              
-              {/* Tab 1: Overview */}
-              {activeTab === 'overview' && (
-                <div className="space-y-4 text-xs font-semibold text-text-secondary">
-                  
-                  {/* Driver custodianship card */}
-                  <div className="flex items-center justify-between border border-border p-3.5 rounded-xl bg-hover/5">
-                    <div className="flex items-center gap-3">
-                      <DriverAvatar 
-                        name={availableDrivers.find(d => d.id === vehicle.assignedDriverId)?.name || 'Unassigned'} 
-                        avatarUrl={availableDrivers.find(d => d.id === vehicle.assignedDriverId)?.avatar} 
-                        size={40} 
-                      />
-                      <div className="text-left">
-                        <span className="block text-[9px] font-black text-text-secondary uppercase tracking-wider">Custodian</span>
-                        <span className="text-text-main font-bold block mt-0.5">
-                          {availableDrivers.find(d => d.id === vehicle.assignedDriverId)?.name || 'Unassigned'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="block text-[9px] font-black text-text-secondary uppercase tracking-wider">Active Trip</span>
-                      <span className="text-text-main font-bold block mt-0.5 text-info">
-                        {vehicle.assignedTripId ? vehicle.assignedTripId : 'None'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* General Specifications Grid */}
-                  <div className="grid grid-cols-2 gap-3 text-left">
-                    <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
-                      <span className="block text-[9px] uppercase font-bold">Class / Type</span>
-                      <span className="font-bold text-text-main block mt-0.5">{vehicle.type}</span>
-                    </div>
-                    <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
-                      <span className="block text-[9px] uppercase font-bold">Cargo Capacity</span>
-                      <span className="font-bold text-text-main block mt-0.5">{vehicle.carrierCap}</span>
-                    </div>
-                    <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
-                      <span className="block text-[9px] uppercase font-bold">Fuel Type</span>
-                      <span className="font-bold text-text-main block mt-0.5">{vehicle.fuelType}</span>
-                    </div>
-                    <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
-                      <span className="block text-[9px] uppercase font-bold">Tank Capacity</span>
-                      <span className="font-bold text-text-main block mt-0.5">{vehicle.fuelTankCapacity || 60} L</span>
-                    </div>
-                    <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
-                      <span className="block text-[9px] uppercase font-bold">Purchase Date</span>
-                      <span className="font-bold text-text-main block mt-0.5">{vehicle.purchaseDate || 'N/A'}</span>
-                    </div>
-                    <div className="border border-border/40 p-2.5 rounded-lg bg-hover/5">
-                      <span className="block text-[9px] uppercase font-bold">Acquisition Cost</span>
-                      <span className="font-bold text-text-main block mt-0.5">INR {vehicle.purchaseCost?.toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  {/* Compliance Policy Watch Checklist */}
-                  <div className="border border-border p-3.5 rounded-xl space-y-3.5 bg-hover/10 text-left">
-                    <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Regulatory Compliance Watch</h5>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
-                        <span className="text-[10px]">Insurance</span>
-                        {docBadge(complianceStatus.insurance)}
-                      </div>
-                      <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
-                        <span className="text-[10px]">Permit</span>
-                        {docBadge(complianceStatus.permit)}
-                      </div>
-                      <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
-                        <span className="text-[10px]">Fitness Cert</span>
-                        {docBadge(complianceStatus.fitness)}
-                      </div>
-                      <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
-                        <span className="text-[10px]">PUC Emission</span>
-                        {docBadge(complianceStatus.puc)}
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              )}
-
-              {/* Tab 2: Logs */}
-              {activeTab === 'logs' && (
-                <div className="space-y-4 text-xs text-left">
-                  
-                  {/* Latest 5 dispatches */}
-                  <div className="space-y-2">
-                    <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Recent Logistics Dispatches</h5>
-                    {trips.length === 0 ? (
-                      <div className="text-center py-4 bg-hover/5 border border-border/40 rounded-lg text-text-secondary font-semibold">No dispatches logged for this asset.</div>
-                    ) : (
-                      <div className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-card">
-                        {trips.slice(0, 3).map(t => (
-                          <div key={t.id} className="p-2.5 flex items-center justify-between font-semibold">
-                            <div className="space-y-0.5">
-                              <span className="block text-[10px] text-info font-bold">{t.tripNumber}</span>
-                              <span className="block text-[10px] text-text-main leading-none">{t.origin} &rarr; {t.destination}</span>
-                            </div>
-                            <Badge status={t.status} className="scale-90" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Servicing schedules */}
-                  <div className="space-y-2">
-                    <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Preventive Maintenance Schedules</h5>
-                    <div className="grid grid-cols-2 gap-3 border border-border p-3 rounded-lg bg-hover/5 font-semibold text-text-secondary">
-                      <div>
-                        <span className="block text-[9px] uppercase">Last Service</span>
-                        <span className="text-text-main font-bold mt-0.5 block">{vehicle.lastServiceDate || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[9px] uppercase">Next Service</span>
-                        <span className="text-text-main font-bold mt-0.5 block">{vehicle.nextServiceDate || 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Refueling logs summary */}
-                  <div className="space-y-2">
-                    <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Fuel Statistics</h5>
-                    <div className="grid grid-cols-3 gap-3 font-semibold text-text-secondary text-center">
-                      <div className="border border-border p-2 rounded bg-hover/10">
-                        <span className="block text-[9px] uppercase">Fuel Econ</span>
-                        <span className="text-text-main font-bold text-xs mt-0.5 block">8.2 km/l</span>
-                      </div>
-                      <div className="border border-border p-2 rounded bg-hover/10">
-                        <span className="block text-[9px] uppercase">Liters Logged</span>
-                        <span className="text-text-main font-bold text-xs mt-0.5 block">140 L</span>
-                      </div>
-                      <div className="border border-border p-2 rounded bg-hover/10">
-                        <span className="block text-[9px] uppercase">Fuel Cost</span>
-                        <span className="text-text-main font-bold text-xs mt-0.5 block">INR 12.6k</span>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              )}
-
-              {/* Tab 3: Timeline */}
-              {activeTab === 'timeline' && (
-                <div className="py-2.5 max-h-[300px] overflow-y-auto pr-1">
-                  <VehicleHistory vehicle={vehicle} />
-                </div>
-              )}
-
-            </div>
-
-            {/* Quick configurations (Odometer status driver assignments) */}
-            {isManager && (
-              <div className="border border-border p-3.5 rounded-xl space-y-4 text-left bg-hover/5">
-                <h5 className="text-[10px] font-black text-text-main uppercase tracking-wider">Configuration Controls</h5>
-                
-                {/* Inline Odometer Edit */}
-                <div className="space-y-1">
-                  <label className="text-[10px] text-text-secondary font-bold uppercase">Update Mileage Odometer (km)</label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      value={odometer}
-                      onChange={(e) => setOdometer(e.target.value)}
-                      className="flex-1 text-xs"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={handleSaveOdometer}
-                      isLoading={savingOdometer}
-                      className="p-2 text-xs font-bold"
-                    >
-                      Save
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Quick Driver Assign */}
-                <div className="space-y-1">
-                  <label className="text-[10px] text-text-secondary font-bold uppercase">Custodian Driver</label>
-                  <select
-                    value={driverId}
-                    onChange={(e) => handleDriverChange(e.target.value)}
-                    disabled={savingDriver || vehicle.status === 'Maintenance' || vehicle.status === 'Retired'}
-                    className="w-full text-xs font-semibold bg-card border border-border rounded-lg p-2 text-text-main focus:outline-none focus:ring-1 focus:ring-info disabled:opacity-50"
-                  >
-                    <option value="">Unassigned</option>
-                    {availableDrivers.map(d => (
-                      <option key={d.id} value={d.id}>{d.name} ({d.id})</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Quick Status Setter */}
-                <div className="space-y-1">
-                  <label className="text-[10px] text-text-secondary font-bold uppercase">Operational Status</label>
-                  <select
-                    value={status}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                    disabled={savingStatus}
-                    className="w-full text-xs font-semibold bg-card border border-border rounded-lg p-2 text-text-main focus:outline-none focus:ring-1 focus:ring-info"
-                  >
-                    <option value="Available">Available</option>
-                    <option value="On Trip">On Trip</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Retired">Retired</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
+        <div className="space-y-6 h-full flex flex-col justify-between">
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            <EntityDetailLayout
+              title={`${vehicle.make} ${vehicle.model}`}
+              subtitle={vehicle.plateNumber}
+              imageUrl={vehicle.image}
+              statusBadge={<Badge status={vehicle.status} />}
+              tabs={detailTabs}
+            />
           </div>
 
-          {/* Action Trigger Buttons Footer */}
-          <div className="space-y-2 border-t border-border pt-4 text-left">
-            <div className={`grid ${isManager ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-              <Button
-                variant="primary"
-                onClick={() => onViewProfile(vehicle.id)}
-                leftIcon={FolderOpen}
-                className="w-full text-xs"
-              >
-                Full Profile
-              </Button>
-              {isManager && (
+          {/* Quick Actions Panel at the bottom */}
+          {isManager && (
+            <div className="border-t border-border pt-4 space-y-3 bg-card shrink-0">
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => onEditProfile(vehicle.id)}
-                  leftIcon={Edit}
+                  onClick={() => {
+                    showToast.success('Maintenance scheduled successfully');
+                  }}
+                  leftIcon={Wrench}
+                  className="text-xs p-2.5"
+                >
+                  Maintenance
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFuelLogModal(true)}
+                  leftIcon={Fuel}
+                  className="text-xs p-2.5"
+                >
+                  Fuel Log
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleArchive}
+                  leftIcon={Archive}
+                  className={`w-full text-xs border-border/80 ${vehicle.isArchived ? 'bg-warning/10 text-warning border-warning/30' : ''}`}
+                >
+                  {vehicle.isArchived ? 'Restore' : 'Archive'}
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={handleDelete}
+                  leftIcon={Trash2}
                   className="w-full text-xs"
                 >
-                  Edit Asset
+                  Delete Asset
                 </Button>
-              )}
+              </div>
             </div>
-            
-            {isManager && (
-              <>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (vehicle.status === 'Maintenance' || vehicle.status === 'Retired') {
-                        showToast.error('Cannot dispatch vehicles in maintenance or retired');
-                        return;
-                      }
-                      showToast.success('Dispatch trip workflow opened in modal');
-                    }}
-                    leftIcon={Compass}
-                    className="text-[10px] p-2"
-                  >
-                    Dispatch Trip
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      showToast.success('Maintenance scheduled successfully');
-                    }}
-                    leftIcon={Wrench}
-                    className="text-[10px] p-2"
-                  >
-                    Maintenance
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowFuelLogModal(true)}
-                    leftIcon={Fuel}
-                    className="text-[10px] p-2"
-                  >
-                    Fuel Log
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleArchive}
-                    leftIcon={Archive}
-                    className={`w-full text-xs border-border/80 ${vehicle.isArchived ? 'bg-warning/10 text-warning border-warning/30' : ''}`}
-                  >
-                    {vehicle.isArchived ? 'Restore' : 'Archive'}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    onClick={handleDelete}
-                    leftIcon={Trash2}
-                    className="w-full text-xs"
-                  >
-                    Delete Asset
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
+          )}
 
           {/* Modal Fuel entry inside Drawer */}
           {showFuelLogModal && (
@@ -592,7 +537,6 @@ const VehicleDrawer = ({
               </div>
             </div>
           )}
-
         </div>
       )}
     </Drawer>

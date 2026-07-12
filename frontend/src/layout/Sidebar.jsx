@@ -16,7 +16,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  ShieldCheck
+  ShieldCheck,
+  Shield,
+  HelpCircle,
+  Bell,
+  UserPlus,
+  CheckSquare
 } from 'lucide-react';
 import { useUI } from '../context/UIContext';
 import ConfirmationDialog from '../components/ConfirmationDialog';
@@ -40,6 +45,7 @@ const Sidebar = () => {
 
   const menuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Approvals', path: '/approvals', icon: CheckSquare },
     {
       name: 'Vehicles',
       path: '/vehicles',
@@ -74,6 +80,9 @@ const Sidebar = () => {
     { name: 'Fuel Logs', path: '/fuel', icon: Fuel },
     { name: 'Expenses', path: '/expenses', icon: DollarSign },
     { name: 'Reports', path: '/reports', icon: BarChart3 },
+    { name: 'User Management', path: '/users', icon: ShieldCheck },
+    { name: 'Audit Logs', path: '/audit-logs', icon: Shield },
+    { name: 'Notifications', path: '/notifications', icon: Bell },
     { name: 'Settings', path: '/settings', icon: Settings },
     { name: 'Profile', path: '/profile', icon: User }
   ];
@@ -126,22 +135,47 @@ const Sidebar = () => {
     const role = currentUser?.role || 'Admin';
     return menuItems
       .map(item => {
-        if (item.children) {
+        let mappedItem = { ...item };
+        
+        // Driver specific renaming
+        if (role === 'Driver') {
+          if (mappedItem.name === 'Vehicles') {
+            mappedItem.name = 'My Vehicle';
+            mappedItem.children = null;
+          }
+          if (mappedItem.name === 'Trips') {
+            mappedItem.name = 'My Trips';
+            mappedItem.children = null;
+          }
+          if (mappedItem.name === 'Fuel Logs') {
+            mappedItem.name = 'My Fuel Logs';
+          }
+        }
+
+        if (mappedItem.children) {
           // Hide Add/Dispatch links for non-managers
-          let filteredChildren = item.children;
+          let filteredChildren = mappedItem.children;
           if (role === 'Safety Officer' || role === 'Financial Analyst') {
-            filteredChildren = item.children.filter(
+            filteredChildren = mappedItem.children.filter(
               child => !child.path.endsWith('/add') && !child.path.endsWith('/dispatch')
             );
           }
-          return { ...item, children: filteredChildren };
+          return { ...mappedItem, children: filteredChildren };
         }
-        return item;
+        return mappedItem;
       })
       .filter(item => {
         if (role === 'Admin') return true;
         if (role === 'Driver') {
-          return item.name === 'Dashboard' || item.name === 'Profile';
+          return (
+            item.name === 'Dashboard' ||
+            item.name === 'My Vehicle' ||
+            item.name === 'My Trips' ||
+            item.name === 'My Fuel Logs' ||
+            item.name === 'Notifications' ||
+            item.name === 'Help Center' ||
+            item.name === 'Profile'
+          );
         }
         if (role === 'Safety Officer') {
           return (
@@ -149,7 +183,10 @@ const Sidebar = () => {
             item.name === 'Vehicles' ||
             item.name === 'Drivers' ||
             item.name === 'Reports' ||
-            item.name === 'Profile'
+            item.name === 'Profile' ||
+            item.name === 'Audit Logs' ||
+            item.name === 'Notifications' ||
+            item.name === 'Help Center'
           );
         }
         if (role === 'Financial Analyst') {
@@ -158,11 +195,17 @@ const Sidebar = () => {
             item.name === 'Fuel Logs' ||
             item.name === 'Expenses' ||
             item.name === 'Reports' ||
-            item.name === 'Profile'
+            item.name === 'Profile' ||
+            item.name === 'Notifications' ||
+            item.name === 'Help Center'
           );
         }
         if (role === 'Fleet Manager') {
-          return item.name !== 'Settings';
+          return (
+            item.name !== 'Settings' &&
+            item.name !== 'User Management' &&
+            item.name !== 'Invite User'
+          );
         }
         return true;
       });

@@ -23,35 +23,47 @@ import { useAuth } from '../../../context/AuthContext';
 /**
  * Slide-out details drawer panel (420px) for active dispatches.
  */
-const TripDrawer = ({ isOpen, onClose, tripId, onViewProfile, onEditProfile, onUpdate }) => {
+const TripDrawer = ({ isOpen, onClose, tripId, trip: propTrip, onViewProfile, onEditProfile, onUpdate }) => {
   const { currentUser } = useAuth();
   const isManager = currentUser?.role === 'Admin' || currentUser?.role === 'Fleet Manager';
 
   // Details local state
-  const [trip, setTrip] = useState(null);
+  const [tripState, setTripState] = useState(null);
+  const trip = propTrip || tripState;
   const [vehicle, setVehicle] = useState(null);
   const [driver, setDriver] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen && tripId) {
-      loadTripData();
+    if (isOpen) {
+      if (propTrip) {
+        loadRelatedData(propTrip);
+      } else if (tripId) {
+        loadTripData();
+      }
     }
-  }, [isOpen, tripId]);
+  }, [isOpen, tripId, propTrip]);
 
-  const loadTripData = async () => {
-    setLoading(true);
+  const loadRelatedData = async (data) => {
     try {
-      const data = await tripService.getById(tripId);
-      setTrip(data);
-
       const [vObj, dObj] = await Promise.all([
         vehicleService.getById(data.vehicleId).catch(() => null),
         driverService.getById(data.driverId).catch(() => null)
       ]);
       setVehicle(vObj);
       setDriver(dObj);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadTripData = async () => {
+    setLoading(true);
+    try {
+      const data = await tripService.getById(tripId);
+      setTripState(data);
+      await loadRelatedData(data);
     } catch {
       showToast.error("Failed to load trip parameters");
     } finally {

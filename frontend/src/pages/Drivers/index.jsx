@@ -49,7 +49,7 @@ const Drivers = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Drivers lists state
-  const [drivers, setDrivers] = useState([]);
+  const [drivers, setDrivers] = useState(driverService.getAll());
   const [loading, setLoading] = useState(false);
 
   // Toolbar & filter configurations
@@ -65,10 +65,14 @@ const Drivers = () => {
   useEffect(() => {
     if (searchParams.get('add') === 'true') {
       setSearchParams({}, { replace: true });
-      setSelectedDriverId(null);
-      setIsModalOpen(true);
+      if (isManager || isSafety) {
+        setSelectedDriverId(null);
+        setIsModalOpen(true);
+      } else {
+        showToast.error("Security audit failed. Unauthorized access level.");
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, isManager, isSafety]);
 
   const loadDrivers = async () => {
     setLoading(true);
@@ -387,6 +391,7 @@ const Drivers = () => {
               isOpen={isDrawerOpen}
               onClose={() => setIsDrawerOpen(false)}
               driverId={drawerDriverId}
+              driver={drivers.find(d => d.id === drawerDriverId)}
               onViewProfile={handleViewDetails}
               onEditProfile={handleEditDetails}
               onUpdate={loadDrivers}
