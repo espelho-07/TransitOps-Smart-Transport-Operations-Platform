@@ -12,5 +12,9 @@ router.post("/", VehicleController.create as any);
 router.put("/:id", VehicleController.update as any);
 router.delete("/:id", VehicleController.delete as any);
 
+// Extra operations
+router.post("/:id/duplicate", VehicleController.duplicate as any);
+router.patch("/:id/archive", VehicleController.archive as any);
+
 export const vehicleRouter = router;
 export default router;

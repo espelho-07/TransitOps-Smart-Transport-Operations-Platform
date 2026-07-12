@@ -45,7 +45,12 @@ router.post("/login", (async (req, res, next) => {
                 id: user._id.toString(),
                 email: user.email,
                 name: user.name,
+                role: user.role || (user.roles && user.roles[0]) || "Fleet Manager",
                 roles: user.roles,
+                phone: user.phone || null,
+                company: user.company || "TransitOps Logistics",
+                avatar: user.avatar || null,
+                status: user.status || "Active",
                 organization_id: user.organization_id.toString()
             }
         });

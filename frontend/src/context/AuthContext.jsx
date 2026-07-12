@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
 import { authService } from '../services/authService';
-import { users, saveCollection } from '../data/db';
 
 export const ROLES = {
   ADMIN: 'Admin',
@@ -29,8 +28,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signup = async (userData) => {
-    const res = await authService.signup(userData);
-    return res;
+    return await authService.signup(userData);
   };
 
   const forgotPassword = async (email) => {
@@ -41,47 +39,30 @@ export const AuthProvider = ({ children }) => {
     return await authService.resetPassword(token, password);
   };
 
+  // Profile update helpers — persist only to localStorage (profile page patches API separately)
+  const _persistUser = (updated) => {
+    localStorage.setItem('user', JSON.stringify(updated));
+    return updated;
+  };
+
   const updateProfileImage = (newUrl) => {
     setCurrentUser(prev => {
       if (!prev) return null;
-      const updated = { ...prev, avatar: newUrl };
-      localStorage.setItem('user', JSON.stringify(updated));
-      const idx = users.findIndex(u => u.id === prev.id || u.email === prev.email);
-      if (idx !== -1) {
-        users[idx].avatar = newUrl;
-        saveCollection('users', users);
-      }
-      return updated;
+      return _persistUser({ ...prev, avatar: newUrl });
     });
   };
 
   const updateCoverImage = (newUrl) => {
     setCurrentUser(prev => {
       if (!prev) return null;
-      const updated = { ...prev, coverImage: newUrl };
-      localStorage.setItem('user', JSON.stringify(updated));
-      const idx = users.findIndex(u => u.id === prev.id || u.email === prev.email);
-      if (idx !== -1) {
-        users[idx].coverImage = newUrl;
-        saveCollection('users', users);
-      }
-      return updated;
+      return _persistUser({ ...prev, coverImage: newUrl });
     });
   };
 
   const updateContactInfo = (phone, emergencyContact, address) => {
     setCurrentUser(prev => {
       if (!prev) return null;
-      const updated = { ...prev, phone, emergencyContact, address };
-      localStorage.setItem('user', JSON.stringify(updated));
-      const idx = users.findIndex(u => u.id === prev.id || u.email === prev.email);
-      if (idx !== -1) {
-        users[idx].phone = phone;
-        users[idx].emergencyContact = emergencyContact;
-        users[idx].address = address;
-        saveCollection('users', users);
-      }
-      return updated;
+      return _persistUser({ ...prev, phone, emergencyContact, address });
     });
   };
 

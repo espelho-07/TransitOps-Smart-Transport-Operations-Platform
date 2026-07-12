@@ -22,7 +22,7 @@ const AuditLogs = () => {
   const hasAccess = currentUser?.role === 'Admin' || currentUser?.role === 'Safety Officer';
 
   // State Management
-  const [activitiesList, setActivitiesList] = useState(activityService.getAll());
+  const [activitiesList, setActivitiesList] = useState([]);
   const [loading, setLoading] = useState(false);
   
   // Search & Filter State

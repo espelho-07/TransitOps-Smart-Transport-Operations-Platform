@@ -28,7 +28,7 @@ const UsersPage = () => {
   const isAdmin = currentUser?.role === 'Admin';
 
   // State Management
-  const [usersList, setUsersList] = useState(userService.getAll());
+  const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);

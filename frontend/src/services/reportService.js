@@ -1,37 +1,22 @@
-import { reports, saveCollection } from '../data/db';
-import { makeThenable } from './thenable';
+import api from './api';
 
 export const reportService = {
-  getAll: () => {
-    return makeThenable([...reports]);
+  getAll: async () => {
+    const res = await api.get('/reports');
+    return res.data;
   },
-  getById: (id) => {
-    const item = reports.find((r) => r.id === id);
-    if (!item) throw new Error("Report not found");
-    return makeThenable({ ...item });
+  getById: async (id) => {
+    const res = await api.get(`/reports/${id}`);
+    return res.data;
   },
-  create: (data) => {
-    const nextId = `R${String(reports.length + 1).padStart(3, '0')}`;
-    const newReport = {
-      id: nextId,
-      status: 'Generated',
-      fileSize: `${Math.floor(Math.random() * 200) + 10} KB`,
-      date: new Date().toISOString().split('T')[0],
-      ...data
-    };
-    reports.push(newReport);
-    saveCollection('reports', reports);
-    return makeThenable({ ...newReport });
+  create: async (data) => {
+    const res = await api.post('/reports', data);
+    return res.data;
   },
-  delete: (id) => {
-    const index = reports.findIndex((r) => r.id === id);
-    if (index !== -1) {
-      reports.splice(index, 1);
-      saveCollection('reports', reports);
-      return makeThenable({ success: true, id });
-    }
-    throw new Error("Report not found");
-  }
+  delete: async (id) => {
+    const res = await api.delete(`/reports/${id}`);
+    return res.data;
+  },
 };
 
 export const ReportService = reportService;

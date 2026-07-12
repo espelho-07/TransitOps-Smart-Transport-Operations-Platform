@@ -11,5 +11,8 @@ router.get("/:id", controller_1.VehicleController.getById);
 router.post("/", controller_1.VehicleController.create);
 router.put("/:id", controller_1.VehicleController.update);
 router.delete("/:id", controller_1.VehicleController.delete);
+// Extra operations
+router.post("/:id/duplicate", controller_1.VehicleController.duplicate);
+router.patch("/:id/archive", controller_1.VehicleController.archive);
 exports.vehicleRouter = router;
 exports.default = router;

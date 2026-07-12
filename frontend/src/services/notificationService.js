@@ -1,50 +1,26 @@
-import { notifications, saveCollection } from '../data/db';
-import { makeThenable } from './thenable';
+import api from './api';
 
 export const notificationService = {
-  getAll: () => {
-    return makeThenable([...notifications]);
+  getAll: async () => {
+    const res = await api.get('/notifications');
+    return res.data;
   },
-  create: (title, description, priority = 'Info', category = 'Fleet') => {
-    const nextId = `N${String(notifications.length + 1).padStart(3, '0')}`;
-    const newNotif = {
-      id: nextId,
-      title,
-      description,
-      priority,
-      category,
-      time: 'Just now',
-      unread: true
-    };
-    notifications.unshift(newNotif);
-    saveCollection('notifications', notifications);
-    return makeThenable({ ...newNotif });
+  create: async (title, description, priority = 'Info', category = 'Fleet') => {
+    const res = await api.post('/notifications', { title, description, priority, category });
+    return res.data;
   },
-  markAsRead: (id) => {
-    const item = notifications.find((n) => n.id === id);
-    if (item) {
-      item.unread = false;
-      saveCollection('notifications', notifications);
-      return makeThenable({ ...item });
-    }
-    throw new Error("Notification not found");
+  markAsRead: async (id) => {
+    const res = await api.patch(`/notifications/${id}/read`);
+    return res.data;
   },
-  markAllAsRead: () => {
-    notifications.forEach((n) => {
-      n.unread = false;
-    });
-    saveCollection('notifications', notifications);
-    return makeThenable([...notifications]);
+  markAllAsRead: async () => {
+    const res = await api.patch('/notifications/read-all');
+    return res.data;
   },
-  archive: (id) => {
-    const index = notifications.findIndex((n) => n.id === id);
-    if (index !== -1) {
-      notifications.splice(index, 1);
-      saveCollection('notifications', notifications);
-      return makeThenable({ success: true, id });
-    }
-    throw new Error("Notification not found");
-  }
+  archive: async (id) => {
+    const res = await api.delete(`/notifications/${id}`);
+    return res.data;
+  },
 };
 
 export const NotificationService = notificationService;

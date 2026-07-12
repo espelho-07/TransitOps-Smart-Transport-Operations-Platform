@@ -49,7 +49,7 @@ const Drivers = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Drivers lists state
-  const [drivers, setDrivers] = useState(driverService.getAll());
+  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Toolbar & filter configurations

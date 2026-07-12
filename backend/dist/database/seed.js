@@ -14,6 +14,7 @@ const model_6 = require("../modules/fuel/model");
 const model_7 = require("../modules/expenses/model");
 const model_8 = require("../modules/notifications/model");
 const model_9 = require("../modules/activities/model");
+const model_10 = require("../modules/reports/model");
 const VEHICLE_MAKES = [
     { make: 'Volvo', models: ['FH16 Heavy', 'VNL 860', 'FE Box Truck'] },
     { make: 'Mercedes-Benz', models: ['Actros 2646', 'Atego 1218', 'Sprinter Cargo'] },
@@ -53,17 +54,75 @@ async function seedLargeDatabase() {
     await model_7.ExpenseModel.deleteMany({});
     await model_8.NotificationModel.deleteMany({});
     await model_9.ActivityModel.deleteMany({});
+    await model_10.ReportModel.deleteMany({});
     console.log("Database cleared.");
-    // 2. SEED DEFAULT USER
-    await new model_1.UserModel({
-        _id: userId,
-        email: "manager@transitops.com",
-        password_hash: "$2b$10$EpRkB1B0p37kQc1pMepZle3G2xYk/r8nJ9pQ/6x739a8U", // password: password
-        name: "Alex Johnson",
-        roles: ["Fleet Manager"],
-        organization_id: orgId
-    }).save();
-    console.log("Default User seeded.");
+    // 2. SEED ALL 5 DEFAULT ROLE-BASED USERS (password: "password" for all)
+    const PASSWORD_HASH = "$2b$10$YwThacezBVJ1m7A3AkyxXeA4ZOHPsCowkqPlYN5YczAuY8mQQ1o1G";
+    const defaultUsers = [
+        {
+            id: "U001",
+            email: "admin@transitops.com",
+            password_hash: PASSWORD_HASH,
+            name: "Alex Johnson",
+            role: "Admin",
+            roles: ["Admin"],
+            company: "TransitOps Logistics",
+            status: "Active",
+            avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80",
+            organization_id: orgId,
+        },
+        {
+            id: "U002",
+            email: "manager@transitops.com",
+            password_hash: PASSWORD_HASH,
+            name: "Marcus Brody",
+            role: "Fleet Manager",
+            roles: ["Fleet Manager"],
+            company: "TransitOps Logistics",
+            status: "Active",
+            avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=150&h=150&q=80",
+            organization_id: orgId,
+        },
+        {
+            id: "U003",
+            email: "driver@transitops.com",
+            password_hash: PASSWORD_HASH,
+            name: "Sarah Jenkins",
+            role: "Driver",
+            roles: ["Driver"],
+            phone: "+1 (555) 234-5678",
+            company: "TransitOps Logistics",
+            status: "Active",
+            avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80",
+            organization_id: orgId,
+        },
+        {
+            id: "U004",
+            email: "safety@transitops.com",
+            password_hash: PASSWORD_HASH,
+            name: "David Vance",
+            role: "Safety Officer",
+            roles: ["Safety Officer"],
+            company: "TransitOps Logistics",
+            status: "Active",
+            avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=150&h=150&q=80",
+            organization_id: orgId,
+        },
+        {
+            id: "U005",
+            email: "analyst@transitops.com",
+            password_hash: PASSWORD_HASH,
+            name: "Fiona Gallagher",
+            role: "Financial Analyst",
+            roles: ["Financial Analyst"],
+            company: "TransitOps Logistics",
+            status: "Active",
+            avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&h=150&q=80",
+            organization_id: orgId,
+        },
+    ];
+    await model_1.UserModel.insertMany(defaultUsers);
+    console.log("All 5 default users seeded.");
     // 3. SEED VEHICLES (50 items)
     const vehiclesList = [];
     for (let i = 1; i <= 50; i++) {

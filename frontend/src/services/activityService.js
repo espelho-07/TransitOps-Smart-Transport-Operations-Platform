@@ -1,42 +1,20 @@
-import { activities, saveCollection } from '../data/db';
-import { makeThenable } from './thenable';
+import api from './api';
 
 export const activityService = {
-  getAll: () => {
-    return makeThenable([...activities]);
+  getAll: async () => {
+    const res = await api.get('/activities');
+    return res.data;
   },
-  create: (action, description, user = 'System') => {
-    let author = user;
-    if (author === 'System' && typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('user');
-        if (stored) {
-          author = JSON.parse(stored).name || 'System';
-        }
-      } catch (err) {
-        console.error(err);
-      }
+  create: async (action, description, user = 'System') => {
+    // Best-effort: fire-and-forget. Non-blocking so UI doesn't break if this fails.
+    try {
+      const res = await api.post('/activities', { action, description, user });
+      return res.data;
+    } catch {
+      // Silently fail — activity logging must never break main flows
+      return { id: null, action, description, user };
     }
-    const nextId = `A${String(activities.length + 1).padStart(3, '0')}`;
-    const newActivity = {
-      id: nextId,
-      user: author,
-      action,
-      description,
-      date: new Date().toLocaleString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      }),
-      status: 'success'
-    };
-    activities.unshift(newActivity);
-    saveCollection('activities', activities);
-    return makeThenable({ ...newActivity });
-  }
+  },
 };
 
 export const ActivityService = activityService;

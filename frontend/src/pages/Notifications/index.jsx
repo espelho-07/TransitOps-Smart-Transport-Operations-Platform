@@ -20,7 +20,7 @@ import { notificationService } from '../../services/notificationService';
 import { showToast } from '../../components/ui/Toast';
 
 const Notifications = () => {
-  const [notificationsList, setNotificationsList] = useState(notificationService.getAll());
+  const [notificationsList, setNotificationsList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('');

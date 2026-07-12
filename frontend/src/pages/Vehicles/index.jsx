@@ -55,8 +55,8 @@ const Vehicles = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Vehicles list state
-  const [vehicles, setVehicles] = useState(vehicleService.getAll());
-  const [drivers, setDrivers] = useState(driverService.getAll());
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Toolbar & filter configurations

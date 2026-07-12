@@ -7,6 +7,7 @@ const ActivitySchema = new Schema(
     user: { type: String, required: true },
     description: { type: String, required: true },
     date: { type: String, required: true },
+    status: { type: String, default: "success" },
     organization_id: { type: Schema.Types.ObjectId, required: true }
   },
   {

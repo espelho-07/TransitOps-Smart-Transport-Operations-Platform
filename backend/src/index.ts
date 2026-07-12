@@ -17,6 +17,8 @@ import { expenseRouter } from "./modules/expenses/routes";
 import { dashboardRouter } from "./modules/dashboard/routes";
 import { notificationRouter } from "./modules/notifications/routes";
 import { activityRouter } from "./modules/activities/routes";
+import { usersRouter } from "./modules/users/routes";
+import { reportsRouter } from "./modules/reports/routes";
 
 // Import Seeder function
 import { seedLargeDatabase } from "./database/seed";
@@ -53,6 +55,8 @@ app.use("/api/expenses", expenseRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/activities", activityRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/reports", reportsRouter);
 
 // Global Error Handler middleware
 app.use(globalErrorHandler as any);

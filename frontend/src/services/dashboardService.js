@@ -1,22 +1,18 @@
-import { makeThenable } from './thenable';
-import { dashboardMetrics } from '../data/dashboard';
+import api from './api';
 
 export const dashboardService = {
-  getKPIs: () => {
-    return makeThenable({ ...dashboardMetrics });
+  getKPIs: async () => {
+    const res = await api.get('/dashboard/kpis');
+    return res.data;
   },
-  getChartsData: () => {
-    return makeThenable({
-      monthlySpend: [120000, 150000, 110000, 180000, 140000, 210000]
-    });
+  getChartsData: async () => {
+    const res = await api.get('/dashboard/charts');
+    return res.data;
   },
-  getInsights: () => {
-    return makeThenable([
-      'Fleet utilization has improved by 4.2% since last week.',
-      'Average fuel efficiency is holding steady at 8.2 km/L.',
-      '3 maintenance approvals are currently pending analyst review.'
-    ]);
-  }
+  getInsights: async () => {
+    const res = await api.get('/dashboard/insights');
+    return res.data;
+  },
 };
 
 export const DashboardService = dashboardService;

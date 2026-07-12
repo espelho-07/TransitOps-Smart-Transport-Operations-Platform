@@ -21,6 +21,8 @@ const routes_7 = require("./modules/expenses/routes");
 const routes_8 = require("./modules/dashboard/routes");
 const routes_9 = require("./modules/notifications/routes");
 const routes_10 = require("./modules/activities/routes");
+const routes_11 = require("./modules/users/routes");
+const routes_12 = require("./modules/reports/routes");
 // Import Seeder function
 const seed_1 = require("./database/seed");
 const app = (0, express_1.default)();
@@ -51,6 +53,8 @@ app.use("/api/expenses", routes_7.expenseRouter);
 app.use("/api/dashboard", routes_8.dashboardRouter);
 app.use("/api/notifications", routes_9.notificationRouter);
 app.use("/api/activities", routes_10.activityRouter);
+app.use("/api/users", routes_11.usersRouter);
+app.use("/api/reports", routes_12.reportsRouter);
 // Global Error Handler middleware
 app.use(error_1.globalErrorHandler);
 async function startServer() {

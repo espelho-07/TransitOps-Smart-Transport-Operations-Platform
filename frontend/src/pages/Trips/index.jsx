@@ -49,9 +49,9 @@ const Trips = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Trips data states
-  const [trips, setTrips] = useState(tripService.getAll());
-  const [vehicles, setVehicles] = useState(vehicleService.getAll());
-  const [drivers, setDrivers] = useState(driverService.getAll());
+  const [trips, setTrips] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Toolbar & filter configurations

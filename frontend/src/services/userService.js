@@ -1,45 +1,26 @@
-import { users, saveCollection } from '../data/db';
-import { makeThenable } from './thenable';
+import api from './api';
 
 export const userService = {
-  getAll: () => {
-    return makeThenable([...users]);
+  getAll: async () => {
+    const res = await api.get('/users');
+    return res.data;
   },
-  getById: (id) => {
-    const item = users.find((u) => u.id === id);
-    if (item) return makeThenable({ ...item });
-    throw new Error("User not found");
+  getById: async (id) => {
+    const res = await api.get(`/users/${id}`);
+    return res.data;
   },
-  create: (data) => {
-    const nextId = `U${String(users.length + 1).padStart(3, '0')}`;
-    const newUser = {
-      id: nextId,
-      status: 'Active',
-      ...data,
-      avatar: data.avatar || `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80`
-    };
-    users.push(newUser);
-    saveCollection('users', users);
-    return makeThenable({ ...newUser });
+  create: async (data) => {
+    const res = await api.post('/users', data);
+    return res.data;
   },
-  update: (id, data) => {
-    const index = users.findIndex((u) => u.id === id);
-    if (index !== -1) {
-      users[index] = { ...users[index], ...data };
-      saveCollection('users', users);
-      return makeThenable({ ...users[index] });
-    }
-    throw new Error("User not found");
+  update: async (id, data) => {
+    const res = await api.put(`/users/${id}`, data);
+    return res.data;
   },
-  delete: (id) => {
-    const index = users.findIndex((u) => u.id === id);
-    if (index !== -1) {
-      users.splice(index, 1);
-      saveCollection('users', users);
-      return makeThenable({ success: true, id });
-    }
-    throw new Error("User not found");
-  }
+  delete: async (id) => {
+    const res = await api.delete(`/users/${id}`);
+    return res.data;
+  },
 };
 
 export const UserService = userService;

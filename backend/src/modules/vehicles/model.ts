@@ -4,6 +4,7 @@ const VehicleSchema = new Schema(
   {
     id: { type: String, required: true, unique: true },
     plateNumber: { type: String, required: true, unique: true },
+    registrationNo: { type: String, default: null }, // Frontend alias for plateNumber
     make: { type: String, required: true },
     model: { type: String, required: true },
     year: { type: Number, required: true },

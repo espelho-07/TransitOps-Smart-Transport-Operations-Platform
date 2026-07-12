@@ -1,60 +1,32 @@
-import { fuel, saveCollection } from '../data/db';
-import { makeThenable } from './thenable';
-import { activityService } from './activityService';
-import { notificationService } from './notificationService';
+import api from './api';
 
 export const fuelService = {
-  getAll: () => {
-    return makeThenable([...fuel]);
+  getAll: async () => {
+    const res = await api.get('/fuel');
+    return res.data;
   },
-  getById: (id) => {
-    const item = fuel.find((f) => f.id === id);
-    if (!item) throw new Error("Fuel log not found");
-    return makeThenable({ ...item });
+  getById: async (id) => {
+    const res = await api.get(`/fuel/${id}`);
+    return res.data;
   },
-  create: (data) => {
-    const nextId = `F${String(fuel.length + 1).padStart(3, '0')}`;
-    const newLog = {
-      id: nextId,
-      receiptNumber: `RCP-${9900 + fuel.length + 1}`,
+  create: async (data) => {
+    const payload = {
       ...data,
-      quantity: Number(data.quantity) || 0,
-      cost: Number(data.cost) || 0,
-      odometer: Number(data.odometer) || 0
+      quantity: Number(data.quantity),
+      cost: Number(data.cost),
+      odometer: Number(data.odometer),
     };
-    fuel.push(newLog);
-    saveCollection('fuel', fuel);
-
-    activityService.create('Log Fuel', `Registered refuel receipt ${newLog.receiptNumber} for vehicle ${data.vehicleId}`);
-    notificationService.create('Fuel Added', `Logged refuel receipt of ${newLog.quantity}L for ${data.vehicleId}.`, 'Info', 'Fuel');
-
-    return makeThenable({ ...newLog });
+    const res = await api.post('/fuel', payload);
+    return res.data;
   },
-  update: (id, data) => {
-    const index = fuel.findIndex((f) => f.id === id);
-    if (index !== -1) {
-      fuel[index] = { ...fuel[index], ...data };
-      saveCollection('fuel', fuel);
-
-      activityService.create('Update Fuel Log', `Modified refuel receipt details for ID ${id}`);
-      return makeThenable({ ...fuel[index] });
-    }
-    throw new Error("Fuel log not found");
+  update: async (id, data) => {
+    const res = await api.put(`/fuel/${id}`, data);
+    return res.data;
   },
-  delete: (id) => {
-    const index = fuel.findIndex((f) => f.id === id);
-    if (index !== -1) {
-      const receipt = fuel[index].receiptNumber;
-      fuel.splice(index, 1);
-      saveCollection('fuel', fuel);
-
-      activityService.create('Delete Fuel Log', `Removed fuel receipt record ${receipt}`);
-      notificationService.create('Fuel Log Removed', `Refuel receipt ${receipt} was deleted.`, 'Warning', 'Fuel');
-
-      return makeThenable({ success: true, id });
-    }
-    throw new Error("Fuel log not found");
-  }
+  delete: async (id) => {
+    const res = await api.delete(`/fuel/${id}`);
+    return res.data;
+  },
 };
 
 export const FuelService = fuelService;

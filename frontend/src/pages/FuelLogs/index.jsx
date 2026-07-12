@@ -33,9 +33,9 @@ const FuelLogs = () => {
   const isFinancial = currentUser?.role === 'Financial Analyst' || currentUser?.role === 'Admin';
 
   // State Management
-  const [logs, setLogs] = useState(fuelService.getAll());
-  const [vehicles, setVehicles] = useState(vehicleService.getAll());
-  const [drivers, setDrivers] = useState(driverService.getAll());
+  const [logs, setLogs] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);

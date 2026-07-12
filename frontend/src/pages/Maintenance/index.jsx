@@ -30,8 +30,8 @@ const Maintenance = () => {
   const isManager = currentUser?.role === 'Admin' || currentUser?.role === 'Fleet Manager';
 
   // State Management
-  const [logs, setLogs] = useState(maintenanceService.getAll());
-  const [vehicles, setVehicles] = useState(vehicleService.getAll());
+  const [logs, setLogs] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);

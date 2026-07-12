@@ -29,8 +29,8 @@ const Expenses = () => {
   const isFinancial = currentUser?.role === 'Financial Analyst' || currentUser?.role === 'Admin';
 
   // State Management
-  const [items, setItems] = useState(expenseService.getAll());
-  const [vehicles, setVehicles] = useState(vehicleService.getAll());
+  const [items, setItems] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);

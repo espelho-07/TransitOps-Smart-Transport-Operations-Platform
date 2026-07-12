@@ -8,6 +8,7 @@ const ActivitySchema = new mongoose_1.Schema({
     user: { type: String, required: true },
     description: { type: String, required: true },
     date: { type: String, required: true },
+    status: { type: String, default: "success" },
     organization_id: { type: mongoose_1.Schema.Types.ObjectId, required: true }
 }, {
     timestamps: true

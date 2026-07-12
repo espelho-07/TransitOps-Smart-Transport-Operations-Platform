@@ -62,13 +62,13 @@ const Dashboard = () => {
   const { currentUser } = useAuth();
 
   // Global operational states
-  const [vehicles, setVehicles] = useState(vehicleService.getAll());
-  const [drivers, setDrivers] = useState(driverService.getAll());
-  const [trips, setTrips] = useState(tripService.getAll());
-  const [expenses, setExpenses] = useState(expenseService.getAll());
-  const [maintenance, setMaintenance] = useState(maintenanceService.getAll());
-  const [fuelLogs, setFuelLogs] = useState(fuelService.getAll());
-  const [notifications, setNotifications] = useState(notificationService.getAll());
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [maintenance, setMaintenance] = useState([]);
+  const [fuelLogs, setFuelLogs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 

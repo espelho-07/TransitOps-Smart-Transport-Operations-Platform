@@ -5,6 +5,7 @@ const mongoose_1 = require("mongoose");
 const VehicleSchema = new mongoose_1.Schema({
     id: { type: String, required: true, unique: true },
     plateNumber: { type: String, required: true, unique: true },
+    registrationNo: { type: String, default: null }, // Frontend alias for plateNumber
     make: { type: String, required: true },
     model: { type: String, required: true },
     year: { type: Number, required: true },
@@ -20,6 +21,9 @@ const VehicleSchema = new mongoose_1.Schema({
     lastServiceDate: { type: String },
     carrierCap: { type: String },
     organization_id: { type: mongoose_1.Schema.Types.ObjectId, required: true },
+    isArchived: { type: Boolean, default: false },
+    assignedDriverId: { type: String, default: null },
+    assignedTripId: { type: String, default: null },
     // Denormalized metrics for operational efficiency
     total_fuel_cost: { type: Number, default: 0 },
     total_maintenance_cost: { type: Number, default: 0 },
