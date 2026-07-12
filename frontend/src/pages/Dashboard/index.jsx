@@ -706,7 +706,7 @@ const Dashboard = () => {
 
   // 3. SAFETY OFFICER DASHBOARD
   const renderSafetyOfficerWorkspace = () => {
-    return renderAdminWorkspace(); // Shares layout structures, filtering specific menus via sidebar clearance levels
+    return renderFleetManagerWorkspace(); // Shares layout structures, filtering specific menus via sidebar clearance levels
   };
 
   // 4. DRIVER WORKSPACE (Simplified, Mobile-Friendly)

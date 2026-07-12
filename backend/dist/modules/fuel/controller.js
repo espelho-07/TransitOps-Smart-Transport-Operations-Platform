@@ -48,8 +48,8 @@ class FuelController {
                 quantity: Number(quantity) || 0,
                 cost: Number(cost) || 0,
                 odometer: Number(odometer) || vehicle.odometer,
-                stationName,
-                receiptNumber,
+                stationName: stationName || "Chevron Station",
+                receiptNumber: receiptNumber || `RCPT-${Math.floor(10000 + Math.random() * 90000)}`,
                 organization_id: orgId,
             });
             // 1. Update vehicle odometer & total_fuel_cost

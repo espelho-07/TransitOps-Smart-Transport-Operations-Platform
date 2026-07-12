@@ -193,8 +193,8 @@ const FuelLogs = () => {
         date: new Date().toISOString().split('T')[0]
       });
       fetchData();
-    } catch {
-      showToast.error('Failed to log refuel entry');
+    } catch (err) {
+      showToast.error(err.response?.data?.error || 'Failed to log refuel entry');
     } finally {
       setIsSubmitting(false);
     }
