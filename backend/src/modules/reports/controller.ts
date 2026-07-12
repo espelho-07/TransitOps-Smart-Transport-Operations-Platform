@@ -31,7 +31,7 @@ export class ReportController {
   static async create(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const orgId = req.user?.organization_id;
-      const count = await ReportModel.countDocuments({ organization_id: orgId });
+      const count = await ReportModel.countDocuments();
       const nextId = `R${String(count + 1).padStart(3, "0")}`;
 
       const fileSizeKB = Math.floor(Math.random() * 200) + 10;

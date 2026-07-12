@@ -26,7 +26,7 @@ router.post("/", (async (req, res, next) => {
     try {
         const orgId = req.user?.organization_id;
         const { action, description, user: actorName } = req.body;
-        const count = await model_1.ActivityModel.countDocuments({ organization_id: orgId });
+        const count = await model_1.ActivityModel.countDocuments();
         const nextId = `A${String(count + 1).padStart(3, "0")}`;
         const activity = await model_1.ActivityModel.create({
             id: nextId,

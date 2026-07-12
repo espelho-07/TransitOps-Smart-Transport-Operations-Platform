@@ -33,7 +33,7 @@ export class VehicleController {
       const orgId = req.user?.organization_id;
 
       // Auto-increment custom ID
-      const count = await VehicleModel.countDocuments({ organization_id: orgId });
+      const count = await VehicleModel.countDocuments();
       const nextId = `V${String(count + 1).padStart(3, "0")}`;
 
       // Normalize registrationNo → plateNumber
@@ -102,7 +102,7 @@ export class VehicleController {
         return;
       }
 
-      const count = await VehicleModel.countDocuments({ organization_id: orgId });
+      const count = await VehicleModel.countDocuments();
       const nextId = `V${String(count + 1).padStart(3, "0")}`;
       const newPlate = `TX-NEW-${nextId}`;
 

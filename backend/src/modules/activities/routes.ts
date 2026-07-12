@@ -24,7 +24,7 @@ router.post("/", (async (req: AuthenticatedRequest, res: Response, next: NextFun
     const orgId = req.user?.organization_id;
     const { action, description, user: actorName } = req.body;
 
-    const count = await ActivityModel.countDocuments({ organization_id: orgId });
+    const count = await ActivityModel.countDocuments();
     const nextId = `A${String(count + 1).padStart(3, "0")}`;
 
     const activity = await ActivityModel.create({

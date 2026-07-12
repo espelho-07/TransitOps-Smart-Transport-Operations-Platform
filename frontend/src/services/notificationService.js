@@ -21,6 +21,10 @@ export const notificationService = {
     const res = await api.delete(`/notifications/${id}`);
     return res.data;
   },
+  clearAll: async () => {
+    const res = await api.delete('/notifications');
+    return res.data;
+  },
 };
 
 export const NotificationService = notificationService;

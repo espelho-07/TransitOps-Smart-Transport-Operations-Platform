@@ -26,7 +26,7 @@ router.post("/", (async (req, res, next) => {
     try {
         const orgId = req.user?.organization_id;
         const { title, description, priority, category } = req.body;
-        const count = await model_1.NotificationModel.countDocuments({ organization_id: orgId });
+        const count = await model_1.NotificationModel.countDocuments();
         const nextId = `N${String(count + 1).padStart(3, "0")}`;
         const notification = await model_1.NotificationModel.create({
             id: nextId,
@@ -65,6 +65,17 @@ router.patch("/read-all", (async (req, res, next) => {
     try {
         const orgId = req.user?.organization_id;
         await model_1.NotificationModel.updateMany({ organization_id: orgId }, { $set: { unread: false } });
+        res.json({ success: true });
+    }
+    catch (error) {
+        next(error);
+    }
+}));
+// DELETE clear all notifications for org
+router.delete("/", (async (req, res, next) => {
+    try {
+        const orgId = req.user?.organization_id;
+        await model_1.NotificationModel.deleteMany({ organization_id: orgId });
         res.json({ success: true });
     }
     catch (error) {

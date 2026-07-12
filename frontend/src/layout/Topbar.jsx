@@ -109,14 +109,13 @@ const Topbar = () => {
     }
   };
 
-  const handleClearRead = async () => {
+  const handleClearAll = async () => {
     try {
-      const readNotifs = notifications.filter(n => !n.unread);
-      await Promise.all(readNotifs.map(n => notificationService.archive(n.id)));
-      showToast.success('Cleared read notifications');
+      await notificationService.clearAll();
+      showToast.success('All notifications cleared');
       fetchNotifications();
     } catch {
-      showToast.error('Failed to clear read alerts');
+      showToast.error('Failed to clear notifications');
     }
   };
 
@@ -307,10 +306,11 @@ const Topbar = () => {
               </button>
               <span className="text-border">|</span>
               <button
-                onClick={handleClearRead}
-                className="text-[10px] font-bold text-text-secondary hover:text-text-main hover:underline"
+                onClick={handleClearAll}
+                disabled={notifications.length === 0}
+                className="text-[10px] font-bold text-text-secondary hover:text-text-main hover:underline disabled:opacity-50 disabled:no-underline"
               >
-                Clear read
+                Clear all
               </button>
             </div>
           </div>

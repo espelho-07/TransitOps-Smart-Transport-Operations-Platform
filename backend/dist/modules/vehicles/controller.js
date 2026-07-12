@@ -31,7 +31,7 @@ class VehicleController {
         try {
             const orgId = req.user?.organization_id;
             // Auto-increment custom ID
-            const count = await model_1.VehicleModel.countDocuments({ organization_id: orgId });
+            const count = await model_1.VehicleModel.countDocuments();
             const nextId = `V${String(count + 1).padStart(3, "0")}`;
             // Normalize registrationNo → plateNumber
             const plateNumber = req.body.registrationNo || req.body.plateNumber;
@@ -92,7 +92,7 @@ class VehicleController {
                 res.status(404).json({ error: "Vehicle not found" });
                 return;
             }
-            const count = await model_1.VehicleModel.countDocuments({ organization_id: orgId });
+            const count = await model_1.VehicleModel.countDocuments();
             const nextId = `V${String(count + 1).padStart(3, "0")}`;
             const newPlate = `TX-NEW-${nextId}`;
             const sourceObj = source.toObject();

@@ -50,7 +50,7 @@ export class UserController {
         return;
       }
 
-      const count = await UserModel.countDocuments({ organization_id: orgId });
+      const count = await UserModel.countDocuments();
       const nextId = `U${String(count + 1).padStart(3, "0")}`;
 
       // Automatically generate a temporary password for new staff added by Admin
