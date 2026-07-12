@@ -62,10 +62,12 @@ class TripController {
                 res.status(400).json({ error: "Driver is already assigned to an active trip." });
                 return;
             }
-            const expiryDate = new Date(driver.licenseExpiryDate || driver.hireDate); // fallback
-            if (expiryDate < new Date()) {
-                res.status(400).json({ error: "Driver license has expired." });
-                return;
+            if (driver.licenseExpiryDate) {
+                const expiryDate = new Date(driver.licenseExpiryDate);
+                if (expiryDate < new Date()) {
+                    res.status(400).json({ error: "Driver license has expired." });
+                    return;
+                }
             }
             // 4. Validate Capacity Limit
             const maxWeightTons = vehicle.max_load_capacity

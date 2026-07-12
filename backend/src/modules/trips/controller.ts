@@ -67,10 +67,12 @@ export class TripController {
         return;
       }
 
-      const expiryDate = new Date(driver.licenseExpiryDate || driver.hireDate); // fallback
-      if (expiryDate < new Date()) {
-        res.status(400).json({ error: "Driver license has expired." });
-        return;
+      if (driver.licenseExpiryDate) {
+        const expiryDate = new Date(driver.licenseExpiryDate);
+        if (expiryDate < new Date()) {
+          res.status(400).json({ error: "Driver license has expired." });
+          return;
+        }
       }
 
       // 4. Validate Capacity Limit
